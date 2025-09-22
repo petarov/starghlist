@@ -1,6 +1,10 @@
 starghlist
 ===============
 
+<p align="left">
+<img src="assets/ghlist.png" alt="Bloodworm vector image" width="100"/>
+</p>
+
 Manage your GitHub starred repositories using MCP.
 
 # Usage
