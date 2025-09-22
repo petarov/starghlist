@@ -7,6 +7,8 @@ starghlist
 
 This is a MCP server that is supposed to help you manage your GitHub starred repositories and lists.
 
+<small>In Bulgarian, „глист“ or "glist" means an intestinal parasitic worm (roundworm).</small>
+
 # Usage
 
 You will need a valid GitHub [PAT](https://github.com/settings/personal-access-tokens).
