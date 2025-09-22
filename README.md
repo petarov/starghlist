@@ -2,18 +2,16 @@ starghlist
 ===============
 
 <p align="left">
-<img src="assets/ghlist.png" alt="Bloodworm vector image" width="100"/>
+<img src="assets/ghlist.png" alt="Bloodworm vector image" width="180"/>
 </p>
 
-Manage your GitHub starred repositories using MCP.
+This is a MCP server that is supposed to help you manage your GitHub starred repositories and lists.
 
 # Usage
 
 You will need a valid GitHub [PAT](https://github.com/settings/personal-access-tokens).
 
-The server uses SSE protocol transport type.
-
-To start on `localhost:24240` run:
+The server uses SSE protocol transport type. To start on `localhost:24240` run:
 
     GITHUB_TOKEN=<your PAT> go run *.go 
 
