@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net/http"
 
-	"github.com/google/go-github/github"
+	"github.com/PuerkitoBio/goquery"
+	"github.com/google/go-github/v74/github"
 	"golang.org/x/oauth2"
 )
 
@@ -84,7 +87,7 @@ func ghFetchStarred(ctx context.Context, username string, page int, limit int) (
 	for {
 		starred, resp, err := ghClient.Activity.ListStarred(ctx, username, opts)
 		if err != nil {
-			log.Fatalf("Error fetching starred repos: %v", err)
+			log.Printf("Error fetching starred repos: %v", err)
 			break
 		}
 
@@ -107,7 +110,7 @@ func ghFetchStarred(ctx context.Context, username string, page int, limit int) (
 func ghSetStarred(ctx context.Context, owner string, repo string) error {
 	_, err := ghClient.Activity.Star(ctx, owner, repo)
 	if err != nil {
-		log.Fatalf("Error starring repo: %v", err)
+		log.Printf("Error starring repo: %v", err)
 		return err
 	}
 
@@ -117,9 +120,48 @@ func ghSetStarred(ctx context.Context, owner string, repo string) error {
 func ghSetUnstarred(ctx context.Context, owner string, repo string) error {
 	_, err := ghClient.Activity.Unstar(ctx, owner, repo)
 	if err != nil {
-		log.Fatalf("Error unstarring repo: %v", err)
+		log.Printf("Error unstarring repo: %v", err)
 		return err
 	}
 
 	return nil
+}
+
+func ghGetLists(ctx context.Context, username string) ([]string, error) {
+	if len(username) == 0 {
+		user, _, err := ghClient.Users.Get(ctx, username)
+		if err != nil {
+			log.Printf("Error fetching %s user: %v", username, err)
+			return nil, err
+		}
+
+		username = user.GetLogin()
+	}
+
+	res, err := http.Get(fmt.Sprintf("https://github.com/%s?tab=stars&user_lists_direction=asc&user_lists_sort=name", username))
+	if err != nil {
+		log.Printf("Error fetching user (%s) stars page: %v", username, err)
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	var results []string
+
+	if res.StatusCode != http.StatusOK {
+		log.Printf("Error fetching user (%s) stars page: (%d) %s",
+			username, res.StatusCode, res.Status)
+		return results, nil
+	}
+
+	doc, err := goquery.NewDocumentFromReader(res.Body)
+	if err != nil {
+		log.Printf("Error loading html page DOM: %v", err)
+		return nil, err
+	}
+
+	doc.Find("#profile-lists-container h3").Each(func(i int, s *goquery.Selection) {
+		results = append(results, s.Text())
+	})
+
+	return results, nil
 }

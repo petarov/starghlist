@@ -23,6 +23,10 @@ type RemoveStarParams struct {
 	Fullnames []string `json:"fullnames,omitempty" jsonschema:"Required list of repository full names that will be unstarred.A repository fullname is in the form of 'onwer/name'"`
 }
 
+type GetListsParams struct {
+	Username string `json:"username,omitempty" jsonschema:"Optional username for which to get the list names"`
+}
+
 func newToolError(message string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -111,6 +115,24 @@ func RemoveStar(ctx context.Context, req *mcp.CallToolRequest, params *AddStarPa
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			&mcp.TextContent{Text: fmt.Sprintf("successfully unstarred %d repositories", len(params.Fullnames))},
+		},
+	}, nil, nil
+}
+
+func GetLists(ctx context.Context, req *mcp.CallToolRequest, params *GetListsParams) (*mcp.CallToolResult, any, error) {
+	lists, err := ghGetLists(ctx, params.Username)
+	if err != nil {
+		return newToolError("fetching lists"), nil, nil
+	}
+
+	json, err := json.Marshal(lists)
+	if err != nil {
+		return newToolError("json marshal lists"), nil, nil
+	}
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: string(json)},
 		},
 	}, nil, nil
 }

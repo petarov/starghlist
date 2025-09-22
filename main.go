@@ -64,6 +64,11 @@ func main() {
 		Description: "Remove star or unstar one or more repositories",
 	}, RemoveStar)
 
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "getListNames",
+		Description: "Get all of the user's list names",
+	}, GetLists)
+
 	handler := mcp.NewSSEHandler(func(request *http.Request) *mcp.Server {
 		logRequest(request)
 		return server
