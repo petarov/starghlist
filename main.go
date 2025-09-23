@@ -50,18 +50,18 @@ func main() {
 	}, nil)
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "getStarred",
+		Name:        "getStars",
 		Description: "Get the users's starred repositories",
 	}, GetStars)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "addStar",
-		Description: "Add star or star one or more repositories",
+		Description: "Add star to one or more repositories",
 	}, AddStar)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "removeStar",
-		Description: "Remove star or unstar one or more repositories",
+		Description: "Remove/unstar one or more repositories",
 	}, RemoveStar)
 
 	mcp.AddTool(server, &mcp.Tool{

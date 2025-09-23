@@ -5,21 +5,26 @@ starghlist
 <img src="assets/ghlist.png" alt="Bloodworm vector image" width="180"/>
 </p>
 
-This is a MCP server that is supposed to help you manage your GitHub starred repositories and lists.
+starghlist<sup>*</sup> is an MCP server designed to help you manage your GitHub starred repositories and lists.
 
-<sub>In Bulgarian, „глист“ or "glist" means an intestinal parasitic worm (roundworm).</sub>
+You can use an AI agent to view, sort, and filter repositories, as well as unstar those that are no longer relevant. 
+The AI agent can also suggest how to categorize your starred repositories based on the GitHub lists you’ve created. 
+Adding or removing repositories from lists is not yet supported—it’s a work in progress.
+
+<sub><sup>*</sup>In Bulgarian, „глист“ or "glist" means an intestinal parasitic worm (roundworm).</sub>
 
 # Tools
 
-- `getStarred`: Get the users's starred repositories.
+- `getStars`: Get your starred repositories.
 - `addStar`: Star one or more repositories.
 - `removeStar`: Unstar one or more repositories.
-- `getListNames`: Get all of the user's lists.
+- `getListNames`: Get all of your lists.
+
+TODO: `addToList`, `removeFromList` are WIP.
 
 # Prompts
 
 TODO ...
-
 
 # Setup
 
