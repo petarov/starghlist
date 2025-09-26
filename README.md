@@ -1,9 +1,9 @@
-starghlist
-===============
-
 <p align="left">
 <img src="assets/ghlist.png" alt="Bloodworm vector image" width="180"/>
 </p>
+
+starghlist
+===============
 
 starghlist<sup>*</sup> is an MCP server designed to help you manage your GitHub starred repositories and lists.
 
