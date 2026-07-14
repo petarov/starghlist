@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -78,7 +80,32 @@ func main() {
 	log.Printf("%s %s MCP server listening on %s",
 		appName, appVersion, listenAddress)
 
-	if err := http.ListenAndServe(listenAddress, handler); err != nil {
+	srv := &http.Server{
+		Addr:         listenAddress,
+		Handler:      requireLocalOrigin(handler),
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}
+}
+
+// requireLocalOrigin rejects browser requests whose Origin is not loopback,
+// blocking DNS-rebinding / CSRF from a web page against this local server.
+// Non-browser MCP clients send no Origin header and are unaffected.
+func requireLocalOrigin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if o := r.Header.Get("Origin"); o != "" {
+			u, err := url.Parse(o)
+			if err != nil || (u.Hostname() != "localhost" &&
+				u.Hostname() != "127.0.0.1" && u.Hostname() != "::1") {
+				http.Error(w, "forbidden origin", http.StatusForbidden)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }

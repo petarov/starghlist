@@ -91,8 +91,11 @@ func GetStars(ctx context.Context, req *mcp.CallToolRequest, params *GetStarsPar
 
 func AddStar(ctx context.Context, req *mcp.CallToolRequest, params *AddStarParams) (*mcp.CallToolResult, any, error) {
 	for _, fullname := range params.Fullnames {
-		parts := strings.SplitN(fullname, "/", 2)
-		if err := ghSetStarred(ctx, parts[0], parts[1]); err != nil {
+		owner, name, ok := strings.Cut(fullname, "/")
+		if !ok || owner == "" || name == "" {
+			return newToolError(fmt.Sprintf("invalid repository fullname %q, expected 'owner/name'", fullname)), nil, nil
+		}
+		if err := ghSetStarred(ctx, owner, name); err != nil {
 			return newToolError(fmt.Sprintf("star repository %s", fullname)), nil, nil
 		}
 	}
@@ -106,8 +109,11 @@ func AddStar(ctx context.Context, req *mcp.CallToolRequest, params *AddStarParam
 
 func RemoveStar(ctx context.Context, req *mcp.CallToolRequest, params *AddStarParams) (*mcp.CallToolResult, any, error) {
 	for _, fullname := range params.Fullnames {
-		parts := strings.SplitN(fullname, "/", 2)
-		if err := ghSetUnstarred(ctx, parts[0], parts[1]); err != nil {
+		owner, name, ok := strings.Cut(fullname, "/")
+		if !ok || owner == "" || name == "" {
+			return newToolError(fmt.Sprintf("invalid repository fullname %q, expected 'owner/name'", fullname)), nil, nil
+		}
+		if err := ghSetUnstarred(ctx, owner, name); err != nil {
 			return newToolError(fmt.Sprintf("unstar repository %s", fullname)), nil, nil
 		}
 	}

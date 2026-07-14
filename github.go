@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/google/go-github/v74/github"
@@ -138,7 +140,8 @@ func ghGetLists(ctx context.Context, username string) ([]string, error) {
 		username = user.GetLogin()
 	}
 
-	res, err := http.Get(fmt.Sprintf("https://github.com/%s?tab=stars&user_lists_direction=asc&user_lists_sort=name", username))
+	client := &http.Client{Timeout: 15 * time.Second}
+	res, err := client.Get(fmt.Sprintf("https://github.com/%s?tab=stars&user_lists_direction=asc&user_lists_sort=name", url.PathEscape(username)))
 	if err != nil {
 		log.Printf("Error fetching user (%s) stars page: %v", username, err)
 		return nil, err
