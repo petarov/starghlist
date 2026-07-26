@@ -20,8 +20,9 @@ const (
 )
 
 var (
-	host = flag.String("host", "localhost", "host to connect to/listen on")
-	port = flag.Int("port", defaultListenPort, "port number to connect to/listen on")
+	host  = flag.String("host", "localhost", "host to connect to/listen on")
+	port  = flag.Int("port", defaultListenPort, "port number to connect to/listen on")
+	stdio = flag.Bool("stdio", false, "serve over stdio instead of listening on a port")
 )
 
 func main() {
@@ -29,7 +30,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(out, "%s %s\n", appName, appVersion)
 		fmt.Fprintf(out, "Manage your GitHub starred repositories using MCP.\n\n")
-		fmt.Fprintf(out, "Usage: %s [-port <port] [-host <host>]\n\n", os.Args[0])
+		fmt.Fprintf(out, "Usage: %s [-stdio] [-port <port] [-host <host>]\n\n", os.Args[0])
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
@@ -70,6 +71,15 @@ func main() {
 		Name:        "getListNames",
 		Description: "Get all of the user's list names",
 	}, GetLists)
+
+	// stdio: one process per client, one handshake, no reconnects. Logging already
+	// goes to stderr, so stdout carries only JSON-RPC.
+	if *stdio {
+		if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil {
+			log.Fatalf("Error serving over stdio: %v", err)
+		}
+		return
+	}
 
 	handler := mcp.NewSSEHandler(func(request *http.Request) *mcp.Server {
 		logRequest(request)
