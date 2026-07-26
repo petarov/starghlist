@@ -81,10 +81,13 @@ func main() {
 		appName, appVersion, listenAddress)
 
 	srv := &http.Server{
-		Addr:         listenAddress,
-		Handler:      requireLocalOrigin(handler),
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		Addr:        listenAddress,
+		Handler:     requireLocalOrigin(handler),
+		ReadTimeout: 10 * time.Second,
+		// WriteTimeout must stay 0: an SSE event stream is a single long-lived
+		// response write, so any deadline here tears the stream down mid-session
+		// and the client reconnects into an uninitialized session.
+		WriteTimeout: 0,
 		IdleTimeout:  120 * time.Second,
 	}
 
