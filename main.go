@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -75,10 +76,16 @@ func main() {
 	}, nil)
 
 	listenAddress := fmt.Sprintf("%s:%d", *host, *port)
-	log.Printf("%s %s MCP server listening on %s",
-		appName, appVersion, listenAddress)
+	srv := &http.Server{
+		Addr:        listenAddress,
+		Handler:     handler,
+		ReadTimeout: 20 * time.Second,
+		IdleTimeout: 120 * time.Second,
+	}
+	log.Printf("%s %s MCP server listening on %s", appName, appVersion,
+		listenAddress)
 
-	if err := http.ListenAndServe(listenAddress, handler); err != nil {
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}
 }
