@@ -120,7 +120,7 @@ func main() {
 			"repository that isn't in the list is a no-op and is not an error.",
 	}, RemoveStarFromList)
 
-	handler := mcp.NewSSEHandler(func(request *http.Request) *mcp.Server {
+	handler := mcp.NewStreamableHTTPHandler(func(request *http.Request) *mcp.Server {
 		logRequest(request)
 		return server
 	}, nil)
