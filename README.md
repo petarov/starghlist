@@ -34,6 +34,10 @@ The server uses the Streamable HTTP transport. To start on `localhost:24240` run
 
     GITHUB_TOKEN=<your PAT> go run *.go 
 
+Alternatively use the binary and specify a port:
+
+    GITHUB_TOKEN=<your PAT> ./starghlist-1.0-darwin-aarch64 -host '[::1]' -port 8080
+
 # Clients
 
 ```json
