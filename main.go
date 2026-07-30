@@ -43,7 +43,7 @@ func main() {
 	logInit()
 
 	ctx := context.Background()
-	createGitHubClient(ctx, token)
+	initGitHubClient(ctx, token)
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "starghlist-server",

@@ -52,14 +52,14 @@ var (
 	}
 )
 
-func createGitHubClient(ctx context.Context, token string) {
+func initGitHubClient(ctx context.Context, token string) {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(ctx, ts)
 	ghClient = github.NewClient(tc)
 }
 
-func newMetaRepo(repo *github.StarredRepository) *MetaRepo {
-	return &MetaRepo{
+func newMetaRepo(repo *github.StarredRepository) MetaRepo {
+	return MetaRepo{
 		StarredAt: repo.GetStarredAt(),
 		// ID:        repo.Repository.GetID(),
 		// NodeID:          repo.Repository.GetNodeID(),
@@ -83,7 +83,7 @@ func newMetaRepo(repo *github.StarredRepository) *MetaRepo {
 	}
 }
 
-func ghFetchStarred(ctx context.Context, username string, page int, limit int) ([]*MetaRepo, error) {
+func ghFetchStarred(ctx context.Context, username string, page int, limit int) ([]MetaRepo, error) {
 	perPage := 100
 	// a page was requested, or a limit caps this to one page-sized batch
 	// either way, stop after the first response instead of walking every page
@@ -102,7 +102,7 @@ func ghFetchStarred(ctx context.Context, username string, page int, limit int) (
 		ListOptions: github.ListOptions{PerPage: perPage, Page: page},
 	}
 
-	var results []*MetaRepo
+	var results []MetaRepo
 
 	for {
 		starred, resp, err := ghClient.Activity.ListStarred(ctx, username, opts)
