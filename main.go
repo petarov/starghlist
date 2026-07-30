@@ -14,19 +14,19 @@ import (
 
 const (
 	appName           = "\u2606 Starghlist"
-	appVersion        = "1.0.0"
 	defaultListenPort = 24240
 )
 
 var (
-	host = flag.String("host", "localhost", "host to connect to/listen on")
-	port = flag.Int("port", defaultListenPort, "port number to connect to/listen on")
+	version = "?.?"
+	host    = flag.String("host", "localhost", "host to connect to/listen on")
+	port    = flag.Int("port", defaultListenPort, "port number to connect to/listen on")
 )
 
 func main() {
 	out := flag.CommandLine.Output()
 	flag.Usage = func() {
-		fmt.Fprintf(out, "%s %s\n", appName, appVersion)
+		fmt.Fprintf(out, "%s %s\n", appName, version)
 		fmt.Fprintf(out, "Manage your GitHub starred repositories using MCP.\n\n")
 		fmt.Fprintf(out, "Usage: %s [-port <port] [-host <host>]\n\n", os.Args[0])
 		flag.PrintDefaults()
@@ -47,7 +47,7 @@ func main() {
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "starghlist-server",
-		Version: appVersion,
+		Version: version,
 	}, nil)
 
 	mcp.AddTool(server, &mcp.Tool{
@@ -132,8 +132,7 @@ func main() {
 		ReadTimeout: 20 * time.Second,
 		IdleTimeout: 120 * time.Second,
 	}
-	log.Printf("%s %s MCP server listening on %s", appName, appVersion,
-		listenAddress)
+	log.Printf("%s v%s MCP server listening on %s", appName, version, listenAddress)
 
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("Error starting server: %v", err)
