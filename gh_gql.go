@@ -364,6 +364,12 @@ func ghListStarLists(ctx context.Context) ([]ghListSummary, error) {
 // taking an ambiguous bool, matching how AddStar/RemoveStar are already
 // split in this codebase.
 func ghSetListMembership(ctx context.Context, fullname, listRef string, add bool) error {
+	verb := "remove"
+	if add {
+		verb = "add"
+	}
+	op := fmt.Sprintf("[%s %s -> %q]", verb, fullname, listRef)
+
 	owner, name, err := parseRepoName(fullname)
 	if err != nil {
 		return err
@@ -388,26 +394,23 @@ func ghSetListMembership(ctx context.Context, fullname, listRef string, add bool
 	if err != nil {
 		return err
 	}
-	log.Printf("resolved repo   %s -> %s", fullname, repoID)
-	log.Printf("resolved list   %q -> %s", target.Name, target.ID)
 
 	currentListIDs, err := gqlMembershipConcurrent(ctx, lists, repoID)
 	if err != nil {
 		return err
 	}
-	log.Printf("current membership: %d list(s)", len(currentListIDs))
 
 	isMember := slices.Contains(currentListIDs, target.ID)
 
 	newListIDs := []string{}
 	switch {
 	case add && isMember:
-		log.Printf("%s is already in list %q — no mutation issued", fullname, target.Name)
+		log.Printf("%s already a member — no mutation issued", op)
 		return nil
 	case add:
 		newListIDs = append(append(newListIDs, currentListIDs...), target.ID)
 	case !add && !isMember:
-		log.Printf("%s is not in list %q — no mutation issued", fullname, target.Name)
+		log.Printf("%s not a member — no mutation issued", op)
 		return nil
 	default: // remove, and it is a member
 		for _, id := range currentListIDs {
@@ -422,13 +425,15 @@ func ghSetListMembership(ctx context.Context, fullname, listRef string, add bool
 		return err
 	}
 
-	log.Printf("%s now belongs to %d list(s):", fullname, len(result))
-	for _, l := range result {
-		log.Printf("  - %s", l.Name)
+	membership := "(none)"
+	if len(result) > 0 {
+		names := make([]string, len(result))
+		for i, l := range result {
+			names[i] = l.Name
+		}
+		membership = strings.Join(names, ", ")
 	}
-	if len(result) == 0 {
-		log.Print("  (none)")
-	}
+	log.Printf("%s done: %d -> %d list(s): %s", op, len(currentListIDs), len(result), membership)
 
 	return nil
 }
