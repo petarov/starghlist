@@ -19,7 +19,7 @@ Adding or removing repositories from lists is not yet supported—it’s a work 
 - `addStar`: Star one or more repositories.
 - `removeStar`: Unstar one or more repositories.
 - `getStarListNames`: Get all of your starred repository lists.
-- (TODO) `addStarToList`, 
+- (TODO) `addStarToList`
 - (TODO) `removeStarFromList`
 
 # Setup
