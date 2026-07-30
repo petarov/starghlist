@@ -99,9 +99,9 @@ func main() {
 			"identifier, visibility, and item count — use this to find the correct identifier before " +
 			"calling addStarToList or removeStarFromList, preferring the slug over the name since list " +
 			"names may contain emoji. " +
-			"With a username: that user's PUBLIC lists as plain name strings only (no slug/id). These " +
-			"belong to a different user and cannot be passed to addStarToList or removeStarFromList, " +
-			"which only ever act on the authenticated user's own lists. " +
+			"With a username: that user's PUBLIC lists as name+slug pairs (no id, visibility, or item " +
+			"count). These belong to a different user and cannot be passed to addStarToList or " +
+			"removeStarFromList, which only ever act on the authenticated user's own lists. " +
 			"A starred repository may belong to several lists or to none.",
 	}, GetLists)
 

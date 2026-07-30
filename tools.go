@@ -27,7 +27,7 @@ type RemoveStarParams struct {
 }
 
 type GetListsParams struct {
-	Username string `json:"username,omitempty" jsonschema:"Optional username to get another user's public star list names (returns plain name strings only, no id/slug). Omit to get the authenticated user's own lists (richer output - name, slug, id, visibility, item count). Names returned for another user are NOT usable as the listName argument to addStarToList/removeStarFromList, which only operate on the authenticated user's own lists"`
+	Username string `json:"username,omitempty" jsonschema:"Optional username to get another user's public star lists (name and slug only, no id, visibility, or item count). Omit to get the authenticated user's own lists (richer output - name, slug, id, visibility, item count). Lists returned for another user are NOT usable as the listName argument to addStarToList/removeStarFromList, which only operate on the authenticated user's own lists"`
 }
 
 type AddStarToListParams struct {

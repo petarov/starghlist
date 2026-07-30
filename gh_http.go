@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -33,6 +36,12 @@ type MetaRepo struct {
 	// WatchersCount   int              `json:"watchers_count,omitempty"`
 	LicenseName string `json:"licenseName,omitempty"`
 	HTMLURL     string `json:"htmlUrl,omitempty"`
+}
+
+type MetaList struct {
+	Name      string `json:"name,omitempty"`
+	Slug      string `json:"slug,omitempty"`
+	ItemCount int    `json:"itemCount,omitempty"`
 }
 
 var (
@@ -138,7 +147,7 @@ func ghSetUnstarred(ctx context.Context, owner string, repo string) error {
 	return nil
 }
 
-func ghGetLists(ctx context.Context, username string) ([]string, error) {
+func ghGetLists(ctx context.Context, username string) ([]MetaList, error) {
 	if len(username) == 0 {
 		user, _, err := ghClient.Users.Get(ctx, username)
 		if err != nil {
@@ -163,7 +172,7 @@ func ghGetLists(ctx context.Context, username string) ([]string, error) {
 	}
 	defer res.Body.Close()
 
-	var results []string
+	var results []MetaList
 
 	if res.StatusCode != http.StatusOK {
 		log.Printf("Error fetching user (%s) stars page: (%d) %s",
@@ -177,8 +186,21 @@ func ghGetLists(ctx context.Context, username string) ([]string, error) {
 		return nil, err
 	}
 
-	doc.Find("#profile-lists-container h3").Each(func(i int, s *goquery.Selection) {
-		results = append(results, s.Text())
+	doc.Find(`#profile-lists-container a[href*='/lists/']`).Each(func(i int, s *goquery.Selection) {
+		name := strings.TrimSpace(s.Find("h3").First().Text())
+		href, ok := s.Attr("href")
+		if len(name) == 0 || !ok {
+			return
+		}
+
+		// try parse count of repos
+		var count int
+		countText := strings.Fields(s.Find("div.color-fg-muted.text-small.no-wrap").First().Text())
+		if len(countText) > 0 {
+			count, _ = strconv.Atoi(countText[0])
+		}
+
+		results = append(results, MetaList{Name: name, Slug: path.Base(href), ItemCount: count})
 	})
 
 	return results, nil
