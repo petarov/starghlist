@@ -92,8 +92,11 @@ func GetStars(ctx context.Context, req *mcp.CallToolRequest, params *GetStarsPar
 func AddStar(ctx context.Context, req *mcp.CallToolRequest, params *AddStarParams) (*mcp.CallToolResult, any, error) {
 	for _, fullname := range params.Fullnames {
 		parts := strings.SplitN(fullname, "/", 2)
+		if len(parts) < 2 {
+			return newToolError(fmt.Sprintf("cannot parse repository fullname: %s (owner/repo expected)", fullname)), nil, nil
+		}
 		if err := ghSetStarred(ctx, parts[0], parts[1]); err != nil {
-			return newToolError(fmt.Sprintf("star repository %s", fullname)), nil, nil
+			return newToolError(fmt.Sprintf("star repository: %s", fullname)), nil, nil
 		}
 	}
 
@@ -104,11 +107,14 @@ func AddStar(ctx context.Context, req *mcp.CallToolRequest, params *AddStarParam
 	}, nil, nil
 }
 
-func RemoveStar(ctx context.Context, req *mcp.CallToolRequest, params *AddStarParams) (*mcp.CallToolResult, any, error) {
+func RemoveStar(ctx context.Context, req *mcp.CallToolRequest, params *RemoveStarParams) (*mcp.CallToolResult, any, error) {
 	for _, fullname := range params.Fullnames {
 		parts := strings.SplitN(fullname, "/", 2)
+		if len(parts) < 2 {
+			return newToolError(fmt.Sprintf("cannot parse repository fullname: %s (owner/repo expected)", fullname)), nil, nil
+		}
 		if err := ghSetUnstarred(ctx, parts[0], parts[1]); err != nil {
-			return newToolError(fmt.Sprintf("unstar repository %s", fullname)), nil, nil
+			return newToolError(fmt.Sprintf("unstar repository: %s", fullname)), nil, nil
 		}
 	}
 
