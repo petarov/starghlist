@@ -16,7 +16,7 @@ import (
 )
 
 type MetaRepo struct {
-	StarredAt github.Timestamp `json:"starred_at,omitempty"`
+	StarredAt github.Timestamp `json:"starred_at,omitzero"`
 	// ID        int64            `json:"id,omitempty"`
 	// NodeID          string           `json:"node_id,omitempty"`
 	OwnerName   string `json:"ownerName,omitempty"`
@@ -26,13 +26,13 @@ type MetaRepo struct {
 	// Homepage        string           `json:"homepage,omitempty"`
 	// DefaultBranch string `json:"default_branch,omitempty"`
 	// MasterBranch    string           `json:"master_branch,omitempty"`
-	CreatedAt github.Timestamp `json:"created_at,omitempty"`
-	// PushedAt        github.Timestamp `json:"pushed_at,omitempty"`
-	UpdatedAt       github.Timestamp `json:"updated_at,omitempty"`
+	CreatedAt github.Timestamp `json:"created_at,omitzero"`
+	// PushedAt        github.Timestamp `json:"pushed_at,omitzero"`
+	UpdatedAt       github.Timestamp `json:"updated_at,omitzero"`
 	Language        string           `json:"language,omitempty"`
 	Fork            bool             `json:"fork,omitempty"`
-	ForksCount      int              `json:"forks_count,omitempty"`
-	StargazersCount int              `json:"stargazers_count,omitempty"`
+	ForksCount      int              `json:"forks_count,omitzero"`
+	StargazersCount int              `json:"stargazers_count,omitzero"`
 	// WatchersCount   int              `json:"watchers_count,omitempty"`
 	LicenseName string `json:"licenseName,omitempty"`
 	HTMLURL     string `json:"htmlUrl,omitempty"`
