@@ -19,12 +19,8 @@ Adding or removing repositories from lists is not yet supported—it’s a work 
 - `addStar`: Star one or more repositories.
 - `removeStar`: Unstar one or more repositories.
 - `getListNames`: Get all of your lists.
-
-TODO: `addToList`, `removeFromList` are WIP.
-
-# Prompts
-
-TODO ...
+- (TODO) `addToList`, 
+- (TODO) `removeFromList`
 
 # Setup
 
@@ -48,11 +44,25 @@ The server uses SSE protocol transport type. To start on `localhost:24240` run:
 
 ### LMStudio
 
-Works pretty well with `gemma-3-12b` and `gpt-oss-20b`, and kind of ok with `llama-3.1-8b-instruct`.
+Works pretty well with `gpt-oss-20b` and `gemma-3-12b`, and kind of ok with `llama-3.1-8b-instruct`.
 
 ### Cline
 
 Pretty much flawless with `claude-sonnet-4`.
+
+# Prompts
+
+Sample prompts tested with `gpt-oss-20b`:
+
+`give me my first starred 10 github projects in a table`
+
+`give me 5 starred projects by the user petarov`
+
+`star the repo petarov/starghlist`
+
+`remove the star from petarov/starghlist`
+
+`give me the names of all my starred repository lists`
 
 # License
 
