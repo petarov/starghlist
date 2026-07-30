@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/google/go-github/v74/github"
@@ -35,13 +36,18 @@ type MetaRepo struct {
 }
 
 var (
-	ghClient *github.Client
+	ghClient   *github.Client
+	httpClient *http.Client
 )
 
 func createGitHubClient(ctx context.Context, token string) {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(ctx, ts)
 	ghClient = github.NewClient(tc)
+
+	httpClient = &http.Client{
+		Timeout: 15 * time.Second,
+	}
 }
 
 func newMetaRepo(repo *github.StarredRepository) *MetaRepo {
@@ -88,7 +94,7 @@ func ghFetchStarred(ctx context.Context, username string, page int, limit int) (
 		starred, resp, err := ghClient.Activity.ListStarred(ctx, username, opts)
 		if err != nil {
 			log.Printf("Error fetching starred repos: %v", err)
-			break
+			return nil, err
 		}
 
 		for _, star := range starred {
@@ -138,7 +144,14 @@ func ghGetLists(ctx context.Context, username string) ([]string, error) {
 		username = user.GetLogin()
 	}
 
-	res, err := http.Get(fmt.Sprintf("https://github.com/%s?tab=stars&user_lists_direction=asc&user_lists_sort=name", username))
+	url := fmt.Sprintf("https://github.com/%s?tab=stars&user_lists_direction=asc&user_lists_sort=name", username)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		log.Printf("Error fetching user (%s) stars page: request error: %v", username, err)
+		return nil, err
+	}
+
+	res, err := httpClient.Do(req)
 	if err != nil {
 		log.Printf("Error fetching user (%s) stars page: %v", username, err)
 		return nil, err

@@ -41,7 +41,7 @@ func GetStars(ctx context.Context, req *mcp.CallToolRequest, params *GetStarsPar
 		return newToolError("fetching starred repositories"), nil, nil
 	}
 
-	json, err := json.Marshal(repos)
+	data, err := json.Marshal(repos)
 	if err != nil {
 		return newToolError("json marshal repositories"), nil, nil
 	}
@@ -82,7 +82,7 @@ func GetStars(ctx context.Context, req *mcp.CallToolRequest, params *GetStarsPar
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			&mcp.TextContent{Text: string(json)},
+			&mcp.TextContent{Text: string(data)},
 			// &mcp.TextContent{Text: buf.String()},
 		},
 		// StructuredContent: repos,
@@ -131,14 +131,14 @@ func GetLists(ctx context.Context, req *mcp.CallToolRequest, params *GetListsPar
 		return newToolError("fetching lists"), nil, nil
 	}
 
-	json, err := json.Marshal(lists)
+	data, err := json.Marshal(lists)
 	if err != nil {
 		return newToolError("json marshal lists"), nil, nil
 	}
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			&mcp.TextContent{Text: string(json)},
+			&mcp.TextContent{Text: string(data)},
 		},
 	}, nil, nil
 }
