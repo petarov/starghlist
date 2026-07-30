@@ -19,8 +19,8 @@ Adding or removing repositories from lists is not yet supported—it’s a work 
 - `addStar`: Star one or more repositories.
 - `removeStar`: Unstar one or more repositories.
 - `getStarListNames`: Get all of your starred repository lists.
-- (TODO) `addStarToList`
-- (TODO) `removeStarFromList`
+- `addStarToList`: Add starred repositories to a list.
+- `removeStarFromList`: Remove starred repositories from a list.
 
 # Setup
 
@@ -66,7 +66,11 @@ Sample prompts tested with `gpt-oss-20b`:
 
 `remove the star from petarov/starghlist`
 
-`give me the names of all my starred repository lists`
+`give me a list of all my starred repository lists`
+
+`add the repo petarov/starghlist to the list ai-dev`
+
+`remove the repo petarov/starghlist from the ai-dev list`
 
 # License
 
