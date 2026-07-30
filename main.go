@@ -52,14 +52,22 @@ func main() {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "getStars",
-		Description: "List the GitHub repositories that the authenticated user has starred. " +
+		Description: "List starred GitHub repositories. " +
+			"With no username: the authenticated user's own stars. With a username: that user's " +
+			"PUBLIC stars instead — useful for browsing someone else's starred repositories, but " +
+			"those results cannot be passed to addStar or removeStar, which only ever act on the " +
+			"authenticated user's own stars. " +
 			"Returns repository identifiers in \"owner/repo\" form along with metadata " +
 			"(description, primary language, star count, topics). " +
-			"Use this to answer questions about what the user has starred, to search or filter " +
-			"their stars by topic or language, or to resolve a vague repo reference " +
-			"(\"that Rust TUI library I starred\") into an exact \"owner/repo\" name before " +
+			"Results are paginated via the page and limit parameters (see their own descriptions). " +
+			"limit defaults to 25 when omitted, to avoid overflowing small-context models; set " +
+			"limit to -1 to fetch every starred repository in one call instead, which can be slow " +
+			"and return a very large result for a user with many stars. " +
+			"Use this to answer questions about what a user has starred, to search or filter " +
+			"stars by topic or language, or to resolve a vague repo reference " +
+			"(\"that Golang TUI library I starred\") into an exact \"owner/repo\" name before " +
 			"calling addStar or removeStar. " +
-			"This returns individual repositories, not the user's star lists — for list names use getListNames.",
+			"This returns individual repositories, not star lists — for list names use getStarListNames.",
 	}, GetStars)
 
 	mcp.AddTool(server, &mcp.Tool{

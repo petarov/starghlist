@@ -8,10 +8,14 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// defaultStarsLimit caps an unspecified getStars call, since fetching every
+// starred repository can easily overflow a small-context local LLM.
+const defaultStarsLimit = 25
+
 type GetStarsParams struct {
 	Username string `json:"username,omitempty" jsonschema:"Optional username for which to get the starred repositories or empty string to use the authenticated user"`
-	Page     int    `json:"page,omitempty" jsonschema:"Optional page number from where to get results.Set to 0 to fetch all repositories"`
-	Limit    int    `json:"limit,omitempty" jsonschema:"Optional limit of respositores to fetch.Set to 0 to fetch all repositories"`
+	Page     int    `json:"page,omitempty" jsonschema:"Optional page number to fetch, using the page size given by limit (or its default of 25). Only meaningful together with a positive limit; ignored when limit is -1, which always returns everything"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"Optional maximum number of repositories to return. Defaults to 25 when omitted. Set to -1 to fetch every starred repository with no limit - this can be slow and return a very large result for a user with many stars"`
 }
 
 type AddStarParams struct {
@@ -45,7 +49,15 @@ func newToolError(message string) *mcp.CallToolResult {
 }
 
 func GetStars(ctx context.Context, req *mcp.CallToolRequest, params *GetStarsParams) (*mcp.CallToolResult, any, error) {
-	repos, err := ghFetchStarred(ctx, params.Username, params.Page, params.Limit)
+	limit := params.Limit
+	switch {
+	case limit == 0:
+		limit = defaultStarsLimit
+	case limit < 0:
+		limit = 0 // no limit
+	}
+
+	repos, err := ghFetchStarred(ctx, params.Username, params.Page, limit)
 	if err != nil {
 		return newToolError("fetching starred repositories"), nil, nil
 	}

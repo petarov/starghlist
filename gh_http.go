@@ -76,9 +76,15 @@ func newMetaRepo(repo *github.StarredRepository) *MetaRepo {
 
 func ghFetchStarred(ctx context.Context, username string, page int, limit int) ([]*MetaRepo, error) {
 	perPage := 100
+	// a page was requested, or a limit caps this to one page-sized batch
+	// either way, stop after the first response instead of walking every page
+	singlePage := page > 0
 	if limit > 0 {
 		perPage = limit
-		page = 1
+		singlePage = true
+		if page == 0 {
+			page = 1
+		}
 	}
 
 	opts := &github.ActivityListStarredOptions{
@@ -102,7 +108,7 @@ func ghFetchStarred(ctx context.Context, username string, page int, limit int) (
 			}
 		}
 
-		if resp.NextPage == 0 || page > 0 {
+		if resp.NextPage == 0 || singlePage {
 			break
 		}
 
