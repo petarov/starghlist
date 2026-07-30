@@ -36,18 +36,17 @@ type MetaRepo struct {
 }
 
 var (
-	ghClient   *github.Client
-	httpClient *http.Client
+	ghClient *github.Client
+
+	httpClient *http.Client = &http.Client{
+		Timeout: 15 * time.Second,
+	}
 )
 
 func createGitHubClient(ctx context.Context, token string) {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(ctx, ts)
 	ghClient = github.NewClient(tc)
-
-	httpClient = &http.Client{
-		Timeout: 15 * time.Second,
-	}
 }
 
 func newMetaRepo(repo *github.StarredRepository) *MetaRepo {

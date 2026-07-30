@@ -24,7 +24,11 @@ Adding or removing repositories from lists is not yet supported—it’s a work 
 
 # Setup
 
-You will need a valid GitHub [PAT](https://github.com/settings/personal-access-tokens).
+If you don't care about managing lists, then you can use a GitHub [PAT](https://github.com/settings/personal-access-tokens).
+The permissions `Profile` and `Starring` should be enough.
+
+If you want to manage lists, this currently works only with a GitHub [classic PAT](https://github.com/settings/tokens). 
+Make sure you check the `user` scope, not just its leafs but the whole scope.
 
 The server uses SSE protocol transport type. To start on `localhost:24240` run:
 

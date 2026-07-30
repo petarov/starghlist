@@ -15,6 +15,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -396,21 +397,15 @@ func ghSetListMembership(ctx context.Context, fullname, listRef string, add bool
 	}
 	log.Printf("current membership: %d list(s)", len(currentListIDs))
 
-	isMember := false
-	for _, id := range currentListIDs {
-		if id == target.ID {
-			isMember = true
-			break
-		}
-	}
+	isMember := slices.Contains(currentListIDs, target.ID)
 
-	var newListIDs []string
+	newListIDs := []string{}
 	switch {
 	case add && isMember:
 		log.Printf("%s is already in list %q — no mutation issued", fullname, target.Name)
 		return nil
 	case add:
-		newListIDs = append(append([]string{}, currentListIDs...), target.ID)
+		newListIDs = append(append(newListIDs, currentListIDs...), target.ID)
 	case !add && !isMember:
 		log.Printf("%s is not in list %q — no mutation issued", fullname, target.Name)
 		return nil
@@ -420,9 +415,6 @@ func ghSetListMembership(ctx context.Context, fullname, listRef string, add bool
 				newListIDs = append(newListIDs, id)
 			}
 		}
-		// newListIDs may end up empty here — this is the live test of
-		// whether the mutation accepts listIds: [] when the target list
-		// was the repo's only membership.
 	}
 
 	result, err := gqlUpdateListsForItem(ctx, repoID, newListIDs)

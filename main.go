@@ -84,12 +84,41 @@ func main() {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "getStarListNames",
-		Description: "List the names of the user's GitHub star lists — the user-created categories " +
-			"(such as \"Dev Tools\" or \"Machine Learning\") into which their starred repositories " +
-			"are organized. Returns list names only, not the repositories inside them. " +
-			"Use this to discover which categories exist, or to find the correct list name before " +
-			"referring to one. A starred repository may belong to several lists or to none.",
+		Description: "List GitHub star lists — the user-created categories (such as \"Dev Tools\" or " +
+			"\"Machine Learning\") into which starred repositories are organized. Not the repositories " +
+			"inside them. " +
+			"With no username: the authenticated user's own lists, each with name, a stable slug " +
+			"identifier, visibility, and item count — use this to find the correct identifier before " +
+			"calling addStarToList or removeStarFromList, preferring the slug over the name since list " +
+			"names may contain emoji. " +
+			"With a username: that user's PUBLIC lists as plain name strings only (no slug/id). These " +
+			"belong to a different user and cannot be passed to addStarToList or removeStarFromList, " +
+			"which only ever act on the authenticated user's own lists. " +
+			"A starred repository may belong to several lists or to none.",
 	}, GetLists)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "addStarToList",
+		Description: "Add one or more of the authenticated user's starred GitHub repositories to one " +
+			"of their star lists. Each repository must be given as \"owner/repo\"; the repository " +
+			"should typically already be starred — call addStar first if unsure. " +
+			"The listName argument is matched against a list's slug, name, or ID; use " +
+			"getStarListNames to find a valid identifier, preferring the slug since list names may " +
+			"contain emoji. This modifies the user's account. Adding a repository already in the list " +
+			"is a no-op and is not an error, so it can be added without checking membership first.",
+	}, AddStarToList)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "removeStarFromList",
+		Description: "Remove one or more repositories from one of the authenticated user's star lists. " +
+			"Each repository must be given as \"owner/repo\". " +
+			"The listName argument is matched against a list's slug, name, or ID; use " +
+			"getStarListNames to find a valid identifier, preferring the slug since list names may " +
+			"contain emoji. This modifies the user's account and is the inverse of addStarToList. " +
+			"It does not unstar the repository or affect its membership in any other list — the " +
+			"repository stays starred and remains in every other list it belongs to. Removing a " +
+			"repository that isn't in the list is a no-op and is not an error.",
+	}, RemoveStarFromList)
 
 	handler := mcp.NewSSEHandler(func(request *http.Request) *mcp.Server {
 		logRequest(request)

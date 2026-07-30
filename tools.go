@@ -23,7 +23,17 @@ type RemoveStarParams struct {
 }
 
 type GetListsParams struct {
-	Username string `json:"username,omitempty" jsonschema:"Optional username for which to get the list names"`
+	Username string `json:"username,omitempty" jsonschema:"Optional username to get another user's public star list names (returns plain name strings only, no id/slug). Omit to get the authenticated user's own lists (richer output - name, slug, id, visibility, item count). Names returned for another user are NOT usable as the listName argument to addStarToList/removeStarFromList, which only operate on the authenticated user's own lists"`
+}
+
+type AddStarToListParams struct {
+	Fullnames []string `json:"fullnames,omitempty" jsonschema:"Required list of repository full names to add to the list. A repository fullname is in the form of 'owner/name'"`
+	ListName  string   `json:"listName,omitempty" jsonschema:"Required identifier of the star list to add the repositories to - a list's slug, name, or ID as returned by getStarListNames"`
+}
+
+type RemoveStarFromListParams struct {
+	Fullnames []string `json:"fullnames,omitempty" jsonschema:"Required list of repository full names to remove from the list. A repository fullname is in the form of 'owner/name'"`
+	ListName  string   `json:"listName,omitempty" jsonschema:"Required identifier of the star list to remove the repositories from - a list's slug, name, or ID as returned by getStarListNames"`
 }
 
 func newToolError(message string) *mcp.CallToolResult {
@@ -126,19 +136,63 @@ func RemoveStar(ctx context.Context, req *mcp.CallToolRequest,
 }
 
 func GetLists(ctx context.Context, req *mcp.CallToolRequest, params *GetListsParams) (*mcp.CallToolResult, any, error) {
-	lists, err := ghGetLists(ctx, params.Username)
-	if err != nil {
-		return newToolError("fetching lists"), nil, nil
-	}
+	var data []byte
 
-	data, err := json.Marshal(lists)
-	if err != nil {
-		return newToolError("json marshal lists"), nil, nil
+	if len(params.Username) > 0 {
+		// Another user's lists aren't reachable via GraphQL (viewer-only), so
+		// fall back to the HTML scrape
+		names, err := ghGetLists(ctx, params.Username)
+		if err != nil {
+			return newToolError("fetching lists"), nil, nil
+		}
+
+		data, err = json.Marshal(names)
+		if err != nil {
+			return newToolError("json marshal lists"), nil, nil
+		}
+	} else {
+		lists, err := ghListStarLists(ctx)
+		if err != nil {
+			return newToolError("fetching lists"), nil, nil
+		}
+
+		data, err = json.Marshal(lists)
+		if err != nil {
+			return newToolError("json marshal lists"), nil, nil
+		}
 	}
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			&mcp.TextContent{Text: string(data)},
+		},
+	}, nil, nil
+}
+
+func AddStarToList(ctx context.Context, req *mcp.CallToolRequest, params *AddStarToListParams) (*mcp.CallToolResult, any, error) {
+	for _, fullname := range params.Fullnames {
+		if err := ghAddRepoToList(ctx, fullname, params.ListName); err != nil {
+			return newToolError(err.Error()), nil, nil
+		}
+	}
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: fmt.Sprintf("successfully added %d repositories to list %q", len(params.Fullnames), params.ListName)},
+		},
+	}, nil, nil
+}
+
+func RemoveStarFromList(ctx context.Context, req *mcp.CallToolRequest, params *RemoveStarFromListParams) (*mcp.CallToolResult, any, error) {
+	for _, fullname := range params.Fullnames {
+		if err := ghRemoveRepoFromList(ctx, fullname, params.ListName); err != nil {
+			return newToolError(err.Error()), nil, nil
+		}
+	}
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: fmt.Sprintf("successfully removed %d repositories from list %q", len(params.Fullnames), params.ListName)},
 		},
 	}, nil, nil
 }
