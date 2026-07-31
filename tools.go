@@ -14,8 +14,8 @@ const defaultStarsLimit = 25
 
 type GetStarsParams struct {
 	Username string `json:"username,omitempty" jsonschema:"Optional username for which to get the starred repositories or empty string to use the authenticated user"`
-	Page     int    `json:"page,omitempty" jsonschema:"Optional page number to fetch, using the page size given by limit (or its default of 25). Only meaningful together with a positive limit; ignored when limit is -1, which always returns everything"`
-	Limit    int    `json:"limit,omitempty" jsonschema:"Optional maximum number of repositories to return. Defaults to 25 when omitted. Set to -1 to fetch every starred repository with no limit - this can be slow and return a very large result for a user with many stars"`
+	Page     int    `json:"page,omitempty" jsonschema:"Optional 1-based page number; page size equals limit (25 by default). Increment page (2, 3, ...) to fetch further batches; a batch smaller than the page size means there are no more results - this is the preferred way to retrieve a user's entire star list without using limit -1. Do not combine page with limit -1"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"Optional. Omit unless the user named a specific number. Omitted returns the 25 most recently starred repos (page 1) - correct for open-ended requests like 'show me my starred repositories'. Set a positive number when the user names a count. IMPORTANT: 'all of them' / 'fetch all' / 'everything' by THEMSELVES do NOT mean set this to -1 - they mean iterate with page: 1, 2, 3, ... at the default page size, stopping once a batch comes back smaller than that size. Set limit: -1 ONLY if the user explicitly rules out multiple calls in their own words (e.g. 'in a single response, don't paginate') - this returns everything unbounded in one call and may be too large to process or fail outright"`
 }
 
 type AddStarParams struct {

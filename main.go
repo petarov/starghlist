@@ -62,9 +62,24 @@ func main() {
 			"Returns repository identifiers in \"owner/repo\" form along with metadata " +
 			"(description, primary language, star count, topics). " +
 			"Results are paginated via the page and limit parameters (see their own descriptions). " +
-			"limit defaults to 25 when omitted, to avoid overflowing small-context models; set " +
-			"limit to -1 to fetch every starred repository in one call instead, which can be slow " +
-			"and return a very large result for a user with many stars. " +
+			"HOW TO CHOOSE limit AND page: omit limit entirely unless the user named a " +
+			"specific number. Omitting it returns the 25 most recently starred repositories " +
+			"(page 1), the correct answer for open-ended requests. Examples: \"show me my " +
+			"starred repositories\" / \"what have I starred\" / \"list my stars\" -> omit " +
+			"limit. \"show me 10 of my stars\" / \"my last 5 stars\" -> limit: 10 / limit: 5. " +
+			"If the user wants EVERYTHING (\"all of them\", \"every starred repo\", \"the " +
+			"complete list\", \"fetch all\", \"yes, fetch all\") — by ITSELF this NEVER means " +
+			"limit: -1. It means: call this tool repeatedly, page: 1 then page: 2, page: 3, " +
+			"… at the default (or a stated) page size, stopping once a call returns fewer " +
+			"repositories than that page size (that was the last page). Do this even though " +
+			"it takes several tool calls — that is the entire point, since it keeps every " +
+			"individual response small enough to process regardless of how many repos exist. " +
+			"limit: -1 returns the WHOLE result set as ONE unbounded response with no size " +
+			"cap, which can be too large to process or fail outright. Only use limit: -1 if " +
+			"the user explicitly rules out multiple calls in their own words, e.g. \"in a " +
+			"single response, don't paginate\" or \"one shot, no separate calls\" — plain " +
+			"\"all\"/\"everything\"/\"fetch all\" phrasing does NOT qualify on its own and " +
+			"still means: iterate pages. " +
 			"Use this to answer questions about what a user has starred, to search or filter " +
 			"stars by topic or language, or to resolve a vague repo reference " +
 			"(\"that Golang TUI library I starred\") into an exact \"owner/repo\" name before " +
