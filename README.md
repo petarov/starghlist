@@ -8,8 +8,8 @@ starghlist
 starghlist<sup>*</sup> is an MCP server designed to help you manage your GitHub starred repositories and lists.
 
 You can use an AI agent to view, sort, and filter repositories, as well as unstar those that are no longer relevant. 
-The AI agent can also suggest how to categorize your starred repositories based on the GitHub lists you’ve created. 
-Adding or removing repositories from lists is not yet supported—it’s a work in progress.
+An LLM may also suggest how to categorize your starred repositories based on the GitHub lists you’ve created, and
+rearrange starred repositories in your lists.
 
 <sub><sup>*</sup>In Bulgarian, „глист“ or "glist" means an intestinal parasitic worm (roundworm).</sub>
 
@@ -19,16 +19,24 @@ Adding or removing repositories from lists is not yet supported—it’s a work 
 - `addStar`: Star one or more repositories.
 - `removeStar`: Unstar one or more repositories.
 - `getStarListNames`: Get all of your starred repository lists.
-- (TODO) `addStarToList`
-- (TODO) `removeStarFromList`
+- `addStarToList`: Add starred repositories to a list.
+- `removeStarFromList`: Remove starred repositories from a list.
 
 # Setup
 
-You will need a valid GitHub [PAT](https://github.com/settings/personal-access-tokens).
+If you don't care about managing lists, then you can use a GitHub [PAT](https://github.com/settings/personal-access-tokens).
+The permissions `Profile` and `Starring` should be enough.
 
-The server uses SSE protocol transport type. To start on `localhost:24240` run:
+If you want to manage lists, this currently works only with a GitHub [classic PAT](https://github.com/settings/tokens). 
+Make sure you check the `user` scope, not just its leafs but the whole scope.
+
+The server uses the Streamable HTTP transport protocol. To start on `localhost:24240` run:
 
     GITHUB_TOKEN=<your PAT> go run *.go 
+
+Alternatively use the binary and specify a port:
+
+    GITHUB_TOKEN=<your PAT> ./starghlist-1.0-darwin-aarch64 -host '[::1]' -port 8080
 
 # Clients
 
@@ -62,7 +70,11 @@ Sample prompts tested with `gpt-oss-20b`:
 
 `remove the star from petarov/starghlist`
 
-`give me the names of all my starred repository lists`
+`give me a list of all my starred repository lists`
+
+`add the repo petarov/starghlist to the list ai-dev`
+
+`remove the repo petarov/starghlist from the ai-dev list`
 
 # License
 

@@ -4,15 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// defaultStarsLimit caps an unspecified getStars call, since fetching all
+// starred repos can easily overflow a small-context local LLM
+const defaultStarsLimit = 25
+
 type GetStarsParams struct {
 	Username string `json:"username,omitempty" jsonschema:"Optional username for which to get the starred repositories or empty string to use the authenticated user"`
-	Page     int    `json:"page,omitempty" jsonschema:"Optional page number from where to get results.Set to 0 to fetch all repositories"`
-	Limit    int    `json:"limit,omitempty" jsonschema:"Optional limit of respositores to fetch.Set to 0 to fetch all repositories"`
+	Page     int    `json:"page,omitempty" jsonschema:"Optional 1-based page number; page size equals limit (25 by default). Increment page (2, 3, ...) to fetch further batches; a batch smaller than the page size means there are no more results - this is the preferred way to retrieve a user's entire star list without using limit -1. Do not combine page with limit -1"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"Optional. Omit unless the user named a specific number. Omitted returns the 25 most recently starred repos (page 1) - correct for open-ended requests like 'show me my starred repositories'. Set a positive number when the user names a count. IMPORTANT: 'all of them' / 'fetch all' / 'everything' by THEMSELVES do NOT mean set this to -1 - they mean iterate with page: 1, 2, 3, ... at the default page size, stopping once a batch comes back smaller than that size. Set limit: -1 ONLY if the user explicitly rules out multiple calls in their own words (e.g. 'in a single response, don't paginate') - this returns everything unbounded in one call and may be too large to process or fail outright"`
 }
 
 type AddStarParams struct {
@@ -24,7 +27,17 @@ type RemoveStarParams struct {
 }
 
 type GetListsParams struct {
-	Username string `json:"username,omitempty" jsonschema:"Optional username for which to get the list names"`
+	Username string `json:"username,omitempty" jsonschema:"Optional username to get another user's public star lists (name and slug only, no id, visibility, or item count). Omit to get the authenticated user's own lists (richer output - name, slug, id, visibility, item count). Lists returned for another user are NOT usable as the listName argument to addStarToList/removeStarFromList, which only operate on the authenticated user's own lists"`
+}
+
+type AddStarToListParams struct {
+	Fullnames []string `json:"fullnames,omitempty" jsonschema:"Required list of repository full names to add to the list. A repository fullname is in the form of 'owner/name'"`
+	ListName  string   `json:"listName,omitempty" jsonschema:"Required identifier of the star list to add the repositories to - a list's slug, name, or ID as returned by getStarListNames"`
+}
+
+type RemoveStarFromListParams struct {
+	Fullnames []string `json:"fullnames,omitempty" jsonschema:"Required list of repository full names to remove from the list. A repository fullname is in the form of 'owner/name'"`
+	ListName  string   `json:"listName,omitempty" jsonschema:"Required identifier of the star list to remove the repositories from - a list's slug, name, or ID as returned by getStarListNames"`
 }
 
 func newToolError(message string) *mcp.CallToolResult {
@@ -36,7 +49,15 @@ func newToolError(message string) *mcp.CallToolResult {
 }
 
 func GetStars(ctx context.Context, req *mcp.CallToolRequest, params *GetStarsParams) (*mcp.CallToolResult, any, error) {
-	repos, err := ghFetchStarred(ctx, params.Username, params.Page, params.Limit)
+	limit := params.Limit
+	switch {
+	case limit == 0:
+		limit = defaultStarsLimit
+	case limit < 0:
+		limit = 0 // no limit
+	}
+
+	repos, err := ghFetchStarred(ctx, params.Username, params.Page, limit)
 	if err != nil {
 		return newToolError("fetching starred repositories"), nil, nil
 	}
@@ -46,56 +67,20 @@ func GetStars(ctx context.Context, req *mcp.CallToolRequest, params *GetStarsPar
 		return newToolError("json marshal repositories"), nil, nil
 	}
 
-	// var buf bytes.Buffer
-	// writer := csv.NewWriter(&buf)
-
-	// writer.Write([]string{
-	// 	"StarredAt", "ID", "OwnerName", "Name", "FullName", "Description",
-	// 	"CreatedAt", "UpdatedAt", "Language", "Fork", "ForksCount",
-	// 	"StargazersCount", "LicenseName", "HTMLURL",
-	// })
-
-	// for _, r := range repos {
-	// 	record := []string{
-	// 		r.StarredAt.String(),
-	// 		strconv.FormatInt(r.ID, 10),
-	// 		r.OwnerName,
-	// 		r.Name,
-	// 		r.FullName,
-	// 		r.Description,
-	// 		r.CreatedAt.String(),
-	// 		r.UpdatedAt.String(),
-	// 		r.Language,
-	// 		strconv.FormatBool(r.Fork),
-	// 		strconv.Itoa(r.ForksCount),
-	// 		strconv.Itoa(r.StargazersCount),
-	// 		r.LicenseName,
-	// 		r.HTMLURL,
-	// 	}
-	// 	writer.Write(record)
-	// }
-
-	// writer.Flush()
-	// if err := writer.Error(); err != nil {
-	// 	return newToolError("writing csv results"), nil, nil
-	// }
-
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			&mcp.TextContent{Text: string(data)},
-			// &mcp.TextContent{Text: buf.String()},
 		},
-		// StructuredContent: repos,
 	}, nil, nil
 }
 
 func AddStar(ctx context.Context, req *mcp.CallToolRequest, params *AddStarParams) (*mcp.CallToolResult, any, error) {
 	for _, fullname := range params.Fullnames {
-		parts := strings.SplitN(fullname, "/", 2)
-		if len(parts) < 2 {
-			return newToolError(fmt.Sprintf("cannot parse repository fullname: %s (owner/repo expected)", fullname)), nil, nil
+		owner, name, err := parseRepoName(fullname)
+		if err != nil {
+			return newToolError(err.Error()), nil, nil
 		}
-		if err := ghSetStarred(ctx, parts[0], parts[1]); err != nil {
+		if err := ghSetStarred(ctx, owner, name); err != nil {
 			return newToolError(fmt.Sprintf("star repository: %s", fullname)), nil, nil
 		}
 	}
@@ -107,13 +92,14 @@ func AddStar(ctx context.Context, req *mcp.CallToolRequest, params *AddStarParam
 	}, nil, nil
 }
 
-func RemoveStar(ctx context.Context, req *mcp.CallToolRequest, params *RemoveStarParams) (*mcp.CallToolResult, any, error) {
+func RemoveStar(ctx context.Context, req *mcp.CallToolRequest,
+	params *RemoveStarParams) (*mcp.CallToolResult, any, error) {
 	for _, fullname := range params.Fullnames {
-		parts := strings.SplitN(fullname, "/", 2)
-		if len(parts) < 2 {
-			return newToolError(fmt.Sprintf("cannot parse repository fullname: %s (owner/repo expected)", fullname)), nil, nil
+		owner, name, err := parseRepoName(fullname)
+		if err != nil {
+			return newToolError(err.Error()), nil, nil
 		}
-		if err := ghSetUnstarred(ctx, parts[0], parts[1]); err != nil {
+		if err := ghSetUnstarred(ctx, owner, name); err != nil {
 			return newToolError(fmt.Sprintf("unstar repository: %s", fullname)), nil, nil
 		}
 	}
@@ -126,19 +112,63 @@ func RemoveStar(ctx context.Context, req *mcp.CallToolRequest, params *RemoveSta
 }
 
 func GetLists(ctx context.Context, req *mcp.CallToolRequest, params *GetListsParams) (*mcp.CallToolResult, any, error) {
-	lists, err := ghGetLists(ctx, params.Username)
-	if err != nil {
-		return newToolError("fetching lists"), nil, nil
-	}
+	var data []byte
 
-	data, err := json.Marshal(lists)
-	if err != nil {
-		return newToolError("json marshal lists"), nil, nil
+	if len(params.Username) > 0 {
+		// Another user's lists aren't reachable via GraphQL (viewer-only), so
+		// fall back to the HTML scrape
+		names, err := ghGetLists(ctx, params.Username)
+		if err != nil {
+			return newToolError("fetching lists"), nil, nil
+		}
+
+		data, err = json.Marshal(names)
+		if err != nil {
+			return newToolError("json marshal lists"), nil, nil
+		}
+	} else {
+		lists, err := ghListStarLists(ctx)
+		if err != nil {
+			return newToolError("fetching lists"), nil, nil
+		}
+
+		data, err = json.Marshal(lists)
+		if err != nil {
+			return newToolError("json marshal lists"), nil, nil
+		}
 	}
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			&mcp.TextContent{Text: string(data)},
+		},
+	}, nil, nil
+}
+
+func AddStarToList(ctx context.Context, req *mcp.CallToolRequest, params *AddStarToListParams) (*mcp.CallToolResult, any, error) {
+	for _, fullname := range params.Fullnames {
+		if err := ghAddRepoToList(ctx, fullname, params.ListName); err != nil {
+			return newToolError(err.Error()), nil, nil
+		}
+	}
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: fmt.Sprintf("successfully added %d repositories to list %q", len(params.Fullnames), params.ListName)},
+		},
+	}, nil, nil
+}
+
+func RemoveStarFromList(ctx context.Context, req *mcp.CallToolRequest, params *RemoveStarFromListParams) (*mcp.CallToolResult, any, error) {
+	for _, fullname := range params.Fullnames {
+		if err := ghRemoveRepoFromList(ctx, fullname, params.ListName); err != nil {
+			return newToolError(err.Error()), nil, nil
+		}
+	}
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: fmt.Sprintf("successfully removed %d repositories from list %q", len(params.Fullnames), params.ListName)},
 		},
 	}, nil, nil
 }

@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
+	"path"
+	"strconv"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/google/go-github/v74/github"
@@ -13,7 +15,7 @@ import (
 )
 
 type MetaRepo struct {
-	StarredAt github.Timestamp `json:"starred_at,omitempty"`
+	StarredAt github.Timestamp `json:"starred_at,omitzero"`
 	// ID        int64            `json:"id,omitempty"`
 	// NodeID          string           `json:"node_id,omitempty"`
 	OwnerName   string `json:"ownerName,omitempty"`
@@ -23,35 +25,36 @@ type MetaRepo struct {
 	// Homepage        string           `json:"homepage,omitempty"`
 	// DefaultBranch string `json:"default_branch,omitempty"`
 	// MasterBranch    string           `json:"master_branch,omitempty"`
-	CreatedAt github.Timestamp `json:"created_at,omitempty"`
-	// PushedAt        github.Timestamp `json:"pushed_at,omitempty"`
-	UpdatedAt       github.Timestamp `json:"updated_at,omitempty"`
+	CreatedAt github.Timestamp `json:"created_at,omitzero"`
+	// PushedAt        github.Timestamp `json:"pushed_at,omitzero"`
+	UpdatedAt       github.Timestamp `json:"updated_at,omitzero"`
 	Language        string           `json:"language,omitempty"`
 	Fork            bool             `json:"fork,omitempty"`
-	ForksCount      int              `json:"forks_count,omitempty"`
-	StargazersCount int              `json:"stargazers_count,omitempty"`
+	ForksCount      int              `json:"forks_count,omitzero"`
+	StargazersCount int              `json:"stargazers_count,omitzero"`
 	// WatchersCount   int              `json:"watchers_count,omitempty"`
 	LicenseName string `json:"licenseName,omitempty"`
 	HTMLURL     string `json:"htmlUrl,omitempty"`
 }
 
+type MetaList struct {
+	Name      string `json:"name,omitempty"`
+	Slug      string `json:"slug,omitempty"`
+	ItemCount int    `json:"itemCount,omitempty"`
+}
+
 var (
-	ghClient   *github.Client
-	httpClient *http.Client
+	ghClient *github.Client
 )
 
-func createGitHubClient(ctx context.Context, token string) {
+func initGithubRestClient(ctx context.Context, token string) {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(ctx, ts)
 	ghClient = github.NewClient(tc)
-
-	httpClient = &http.Client{
-		Timeout: 15 * time.Second,
-	}
 }
 
-func newMetaRepo(repo *github.StarredRepository) *MetaRepo {
-	return &MetaRepo{
+func newMetaRepo(repo *github.StarredRepository) MetaRepo {
+	return MetaRepo{
 		StarredAt: repo.GetStarredAt(),
 		// ID:        repo.Repository.GetID(),
 		// NodeID:          repo.Repository.GetNodeID(),
@@ -75,11 +78,17 @@ func newMetaRepo(repo *github.StarredRepository) *MetaRepo {
 	}
 }
 
-func ghFetchStarred(ctx context.Context, username string, page int, limit int) ([]*MetaRepo, error) {
+func ghFetchStarred(ctx context.Context, username string, page int, limit int) ([]MetaRepo, error) {
 	perPage := 100
+	// a page was requested, or a limit caps this to one page-sized batch
+	// either way, stop after the first response instead of walking every page
+	singlePage := page > 0
 	if limit > 0 {
 		perPage = limit
-		page = 1
+		singlePage = true
+		if page == 0 {
+			page = 1
+		}
 	}
 
 	opts := &github.ActivityListStarredOptions{
@@ -88,7 +97,7 @@ func ghFetchStarred(ctx context.Context, username string, page int, limit int) (
 		ListOptions: github.ListOptions{PerPage: perPage, Page: page},
 	}
 
-	var results []*MetaRepo
+	var results []MetaRepo
 
 	for {
 		starred, resp, err := ghClient.Activity.ListStarred(ctx, username, opts)
@@ -103,7 +112,7 @@ func ghFetchStarred(ctx context.Context, username string, page int, limit int) (
 			}
 		}
 
-		if resp.NextPage == 0 || page > 0 {
+		if resp.NextPage == 0 || singlePage {
 			break
 		}
 
@@ -133,7 +142,7 @@ func ghSetUnstarred(ctx context.Context, owner string, repo string) error {
 	return nil
 }
 
-func ghGetLists(ctx context.Context, username string) ([]string, error) {
+func ghGetLists(ctx context.Context, username string) ([]MetaList, error) {
 	if len(username) == 0 {
 		user, _, err := ghClient.Users.Get(ctx, username)
 		if err != nil {
@@ -151,14 +160,14 @@ func ghGetLists(ctx context.Context, username string) ([]string, error) {
 		return nil, err
 	}
 
-	res, err := httpClient.Do(req)
+	res, err := globHttpClient.Do(req)
 	if err != nil {
 		log.Printf("Error fetching user (%s) stars page: %v", username, err)
 		return nil, err
 	}
 	defer res.Body.Close()
 
-	var results []string
+	var results []MetaList
 
 	if res.StatusCode != http.StatusOK {
 		log.Printf("Error fetching user (%s) stars page: (%d) %s",
@@ -172,8 +181,21 @@ func ghGetLists(ctx context.Context, username string) ([]string, error) {
 		return nil, err
 	}
 
-	doc.Find("#profile-lists-container h3").Each(func(i int, s *goquery.Selection) {
-		results = append(results, s.Text())
+	doc.Find(`#profile-lists-container a[href*='/lists/']`).Each(func(i int, s *goquery.Selection) {
+		name := strings.TrimSpace(s.Find("h3").First().Text())
+		href, ok := s.Attr("href")
+		if len(name) == 0 || !ok {
+			return
+		}
+
+		// try parse count of repos
+		var count int
+		countText := strings.Fields(s.Find("div.color-fg-muted.text-small.no-wrap").First().Text())
+		if len(countText) > 0 {
+			count, _ = strconv.Atoi(countText[0])
+		}
+
+		results = append(results, MetaList{Name: name, Slug: path.Base(href), ItemCount: count})
 	})
 
 	return results, nil
