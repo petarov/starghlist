@@ -18,9 +18,10 @@ rearrange starred repositories in your lists.
 - `getStars`: Get starred repositories either by you or somebody else.
 - `addStar`: Star one or more repositories.
 - `removeStar`: Unstar one or more repositories.
-- `getStarListNames`: Get all of your starred repository lists.
+- `getStarListNames`: Get all starred repository lists by you or somebody else.
 - `addStarToList`: Add starred repositories to a list.
 - `removeStarFromList`: Remove starred repositories from a list.
+- (TODO) `getRepositoriesByList`: Get all starred repositories in a particular list.
 
 # Setup
 
@@ -36,7 +37,7 @@ The server uses the Streamable HTTP transport protocol. To start on `localhost:2
 
 Alternatively use the binary and specify a port:
 
-    GITHUB_TOKEN=<your PAT> ./starghlist-1.0-darwin-aarch64 -host '[::1]' -port 8080
+    GITHUB_TOKEN=<your PAT> ./starghlist-1.1-darwin-aarch64 -host '[::1]' -port 8080
 
 # Clients
 

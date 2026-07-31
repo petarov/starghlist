@@ -1,5 +1,5 @@
 APPNAME = starghlist
-APPVER = 1.1
+APPVER = 1.2
 LDFLAGS = "-s -w -X 'main.version=$(APPVER)'"
 
 .PHONY: all
