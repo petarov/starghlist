@@ -8,8 +8,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// defaultStarsLimit caps an unspecified getStars call, since fetching every
-// starred repository can easily overflow a small-context local LLM.
+// defaultStarsLimit caps an unspecified getStars call, since fetching all
+// starred repos can easily overflow a small-context local LLM
 const defaultStarsLimit = 25
 
 type GetStarsParams struct {
@@ -67,46 +67,10 @@ func GetStars(ctx context.Context, req *mcp.CallToolRequest, params *GetStarsPar
 		return newToolError("json marshal repositories"), nil, nil
 	}
 
-	// var buf bytes.Buffer
-	// writer := csv.NewWriter(&buf)
-
-	// writer.Write([]string{
-	// 	"StarredAt", "ID", "OwnerName", "Name", "FullName", "Description",
-	// 	"CreatedAt", "UpdatedAt", "Language", "Fork", "ForksCount",
-	// 	"StargazersCount", "LicenseName", "HTMLURL",
-	// })
-
-	// for _, r := range repos {
-	// 	record := []string{
-	// 		r.StarredAt.String(),
-	// 		strconv.FormatInt(r.ID, 10),
-	// 		r.OwnerName,
-	// 		r.Name,
-	// 		r.FullName,
-	// 		r.Description,
-	// 		r.CreatedAt.String(),
-	// 		r.UpdatedAt.String(),
-	// 		r.Language,
-	// 		strconv.FormatBool(r.Fork),
-	// 		strconv.Itoa(r.ForksCount),
-	// 		strconv.Itoa(r.StargazersCount),
-	// 		r.LicenseName,
-	// 		r.HTMLURL,
-	// 	}
-	// 	writer.Write(record)
-	// }
-
-	// writer.Flush()
-	// if err := writer.Error(); err != nil {
-	// 	return newToolError("writing csv results"), nil, nil
-	// }
-
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			&mcp.TextContent{Text: string(data)},
-			// &mcp.TextContent{Text: buf.String()},
 		},
-		// StructuredContent: repos,
 	}, nil, nil
 }
 

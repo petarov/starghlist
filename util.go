@@ -2,7 +2,13 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
+	"time"
+)
+
+var (
+	globHttpClient *http.Client
 )
 
 // parseRepoName returns owner and repository name from full repository name
@@ -13,4 +19,8 @@ func parseRepoName(fullRepoName string) (string, string, error) {
 	}
 
 	return parts[0], parts[1], nil
+}
+
+func initHttpClient() {
+	globHttpClient = &http.Client{Timeout: 15 * time.Second}
 }

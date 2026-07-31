@@ -8,7 +8,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/google/go-github/v74/github"
@@ -46,13 +45,9 @@ type MetaList struct {
 
 var (
 	ghClient *github.Client
-
-	httpClient *http.Client = &http.Client{
-		Timeout: 15 * time.Second,
-	}
 )
 
-func initGitHubClient(ctx context.Context, token string) {
+func initGithubRestClient(ctx context.Context, token string) {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(ctx, ts)
 	ghClient = github.NewClient(tc)
@@ -165,7 +160,7 @@ func ghGetLists(ctx context.Context, username string) ([]MetaList, error) {
 		return nil, err
 	}
 
-	res, err := httpClient.Do(req)
+	res, err := globHttpClient.Do(req)
 	if err != nil {
 		log.Printf("Error fetching user (%s) stars page: %v", username, err)
 		return nil, err

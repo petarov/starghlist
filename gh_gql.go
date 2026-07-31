@@ -1,11 +1,5 @@
 package main
 
-// gh_gql.go talks to GitHub's GraphQL API for star-list operations that the
-// REST API doesn't expose (see /Users/ppetrov/.claude/plans/adaptive-napping-pike.md).
-// It is self-contained and touches nothing else in the package. Entry points
-// are called manually from main.go for now, pending Step 2 of the plan
-// (wiring them up as real MCP tools in tools.go).
-
 import (
 	"bytes"
 	"context"
@@ -14,17 +8,20 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
-const ghGraphQLURL = "https://api.github.com/graphql"
+const (
+	ghGraphQLURL                   = "https://api.github.com/graphql"
+	ghGraphQLMembershipConcurrency = 5
+)
 
-var ghGQLHTTPClient = &http.Client{Timeout: 15 * time.Second}
+var (
+	gqlHttpAuthHeader = ""
+)
 
 type ghGQLError struct {
 	Message string `json:"message"`
@@ -50,15 +47,12 @@ type ghListSummary struct {
 	} `json:"items"`
 }
 
-// gqlQuery POSTs a GraphQL query/mutation and decodes its "data" into out.
-// GitHub's GraphQL API returns HTTP 200 even on failure, with an "errors"
-// array instead — that array is checked before out is ever touched.
-func gqlQuery(ctx context.Context, query string, vars map[string]any, out any) error {
-	token := os.Getenv("GITHUB_TOKEN")
-	if len(token) == 0 {
-		return fmt.Errorf("GITHUB_TOKEN environment variable not set")
-	}
+func initGithubGraphQLClient(token string) {
+	gqlHttpAuthHeader = "bearer " + token
+}
 
+// gqlQuery Internal. POSTs a GraphQL query/mutation and decodes its "data" into out.
+func gqlQuery(ctx context.Context, query string, vars map[string]any, out any) error {
 	body, err := json.Marshal(map[string]any{
 		"query":     query,
 		"variables": vars,
@@ -72,9 +66,9 @@ func gqlQuery(ctx context.Context, query string, vars map[string]any, out any) e
 		return fmt.Errorf("build graphql request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "bearer "+token)
+	req.Header.Set("Authorization", gqlHttpAuthHeader)
 
-	res, err := ghGQLHTTPClient.Do(req)
+	res, err := globHttpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("graphql request: %w", err)
 	}
@@ -89,21 +83,21 @@ func gqlQuery(ctx context.Context, query string, vars map[string]any, out any) e
 		return fmt.Errorf("graphql http %d: %s", res.StatusCode, string(raw))
 	}
 
-	var gr ghGQLResponse
-	if err := json.Unmarshal(raw, &gr); err != nil {
+	var resp ghGQLResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
 		return fmt.Errorf("unmarshal graphql response: %w (body: %s)", err, string(raw))
 	}
 
-	if len(gr.Errors) > 0 {
-		msgs := make([]string, len(gr.Errors))
-		for i, e := range gr.Errors {
+	if len(resp.Errors) > 0 {
+		msgs := make([]string, len(resp.Errors))
+		for i, e := range resp.Errors {
 			msgs[i] = e.Message
 		}
 		return fmt.Errorf("graphql errors: %s", strings.Join(msgs, "; "))
 	}
 
 	if out != nil {
-		if err := json.Unmarshal(gr.Data, out); err != nil {
+		if err := json.Unmarshal(resp.Data, out); err != nil {
 			return fmt.Errorf("unmarshal graphql data: %w", err)
 		}
 	}
@@ -111,8 +105,7 @@ func gqlQuery(ctx context.Context, query string, vars map[string]any, out any) e
 	return nil
 }
 
-// gqlRepoID resolves an "owner/repo" pair to a Repository node ID, the form
-// updateUserListsForItem's itemId requires — not "owner/repo".
+// gqlRepoID resolves an "owner/repo" pair to a Repository ID
 func gqlRepoID(ctx context.Context, owner, name string) (string, error) {
 	const query = `
 	query($owner: String!, $name: String!) {
@@ -139,9 +132,8 @@ func gqlRepoID(ctx context.Context, owner, name string) (string, error) {
 	return resp.Repository.ID, nil
 }
 
-// gqlAllLists fetches the viewer's lists (id/name/slug/isPrivate). It does not
-// page past 100 lists — this account has 13, and a second page would need its
-// own cursor loop.
+// gqlAllLists fetches the viewer's lists (id/name/slug/isPrivate).
+// It does not page past 100 lists!
 func gqlAllLists(ctx context.Context) ([]ghListSummary, error) {
 	const query = `
 	query {
@@ -180,8 +172,7 @@ func gqlAllLists(ctx context.Context) ([]ghListSummary, error) {
 
 // gqlListContainsRepo pages through a single list's items via node(id:) —
 // there is no User.list(slug:) field, so this is the only way to look up one
-// list's contents by ID. Pagination matters here: at least one existing list
-// already has 93 items.
+// list's contents by ID.
 func gqlListContainsRepo(ctx context.Context, listID, repoID string) (bool, error) {
 	const query = `
 	query($id: ID!, $after: String) {
@@ -222,7 +213,7 @@ func gqlListContainsRepo(ctx context.Context, listID, repoID string) (bool, erro
 		}
 
 		for _, n := range resp.Node.Items.Nodes {
-			// nodes is [UserListItems] with nullable elements per the schema;
+			// nodes is [UserListItems] with nullable elements per the schema
 			// an empty ID here means a null slot, not a match.
 			if len(n.ID) > 0 && n.ID == repoID {
 				return true, nil
@@ -237,17 +228,11 @@ func gqlListContainsRepo(ctx context.Context, listID, repoID string) (bool, erro
 }
 
 // gqlMembershipConcurrent runs gqlListContainsRepo for every list in
-// parallel, capped at ghMembershipConcurrency simultaneous requests, and
+// parallel, capped at ghGraphQLMembershipConcurrency simultaneous requests, and
 // returns the IDs of lists that contain repoID.
 //
-// This exists to cut wall-clock time versus checking each list one after
-// another, WITHOUT changing the query shape: each request is still the exact
-// single-list node(id:) query already proven not to trigger the 502 that a
-// combined/nested/aliased-batch query did. Concurrency only changes when
-// those identical requests are sent, not what's asked for in any one of them.
+// This exists to cut time as opposed to checking each list one after another.
 func gqlMembershipConcurrent(ctx context.Context, lists []ghListSummary, repoID string) ([]string, error) {
-	const ghMembershipConcurrency = 5
-
 	type result struct {
 		listID string
 		found  bool
@@ -255,19 +240,19 @@ func gqlMembershipConcurrent(ctx context.Context, lists []ghListSummary, repoID 
 	}
 
 	results := make(chan result, len(lists))
-	sem := make(chan struct{}, ghMembershipConcurrency)
+	semaphore := make(chan struct{}, ghGraphQLMembershipConcurrency)
 
 	var wg sync.WaitGroup
-	for _, l := range lists {
+	for _, entry := range lists {
 		wg.Add(1)
-		go func(l ghListSummary) {
+		go func(list ghListSummary) {
 			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
 
-			found, err := gqlListContainsRepo(ctx, l.ID, repoID)
-			results <- result{listID: l.ID, found: found, err: err}
-		}(l)
+			found, err := gqlListContainsRepo(ctx, list.ID, repoID)
+			results <- result{listID: list.ID, found: found, err: err}
+		}(entry)
 	}
 
 	go func() {
@@ -292,8 +277,6 @@ func gqlMembershipConcurrent(ctx context.Context, lists []ghListSummary, repoID 
 	return memberListIDs, firstErr
 }
 
-// gqlUpdateListsForItem calls updateUserListsForItem. listIds is the
-// COMPLETE desired membership set, not a delta.
 func gqlUpdateListsForItem(ctx context.Context, repoID string, listIDs []string) ([]ghListSummary, error) {
 	const query = `
 	mutation($itemId: ID!, $listIds: [ID!]!) {
@@ -323,10 +306,7 @@ func gqlUpdateListsForItem(ctx context.Context, repoID string, listIDs []string)
 	return resp.UpdateUserListsForItem.Lists, nil
 }
 
-// findList matches ref against a list's ID, then slug, then name — in that
-// priority order, since slug/name collisions across those fields are
-// possible in principle (e.g. a list literally named after another list's
-// slug) and ID is unambiguous by construction.
+// findList matches ref against a list's ID, then slug, then name, in that order.
 func findList(lists []ghListSummary, ref string) *ghListSummary {
 	for i := range lists {
 		if lists[i].ID == ref {
@@ -346,23 +326,18 @@ func findList(lists []ghListSummary, ref string) *ghListSummary {
 	return nil
 }
 
-// ghListStarLists returns every star list on the authenticated account —
-// name, node ID, slug, visibility, and item count for each. Use the
-// returned ID/Slug/Name as ghAddRepoToList / ghRemoveRepoFromList's listRef
-// argument.
+// ghListStarLists returns every star list on the authenticated account.
+// Fields returned: name, node ID, slug, visibility, and item count for each.
 func ghListStarLists(ctx context.Context) ([]ghListSummary, error) {
 	return gqlAllLists(ctx)
 }
 
 // ghSetListMembership is the shared read-modify-write behind
 // ghAddRepoToList and ghRemoveRepoFromList. GraphQL's listIds argument is a
-// COMPLETE replacement, not a delta, so both directions need the same steps
-// — resolve repo + list, read current membership, compute the new complete
-// set, mutate — and only differ in whether the target list ID is added to or
-// removed from that set. Kept as one function so shared logic lives once;
-// the two public entry points stay separate and self-describing rather than
-// taking an ambiguous bool, matching how AddStar/RemoveStar are already
-// split in this codebase.
+// full replacement, not a delta, so both directions need the same steps:
+// resolve repo + list, read current membership, compute the new complete
+// set, mutate, and only differ in whether the target list ID is added to or
+// removed from that set.
 func ghSetListMembership(ctx context.Context, fullname, listRef string, add bool) error {
 	verb := "remove"
 	if add {
@@ -400,6 +375,7 @@ func ghSetListMembership(ctx context.Context, fullname, listRef string, add bool
 		return err
 	}
 
+	// is the target list among the lists the curretnly contain the repo?
 	isMember := slices.Contains(currentListIDs, target.ID)
 
 	newListIDs := []string{}
@@ -439,30 +415,24 @@ func ghSetListMembership(ctx context.Context, fullname, listRef string, add bool
 }
 
 // ghAddRepoToList adds fullname ("owner/repo") to the star list identified
-// by listRef, then logs the repo's resulting list membership. listRef is
-// matched, in order, against each list's node ID, slug, then name (all
-// case-insensitive except ID which is case-sensitive by construction) — so
-// any of the three fields ghListStarLists returns works as-is, no need to
-// type the emoji-laden display name.
+// by listRef. listRef is matched, in order, against each list's node ID, slug,
+// then name (all case-insensitive except ID which is case-sensitive).
 //
-// It is read-modify-write and deliberately non-destructive: it reads the
-// repo's current memberships across every list, unions in the target list,
-// and writes the whole set back — existing memberships are preserved. If the
-// repo is already in the target list, it reports that and returns without
-// issuing the mutation.
+// It is read-modify-write: it reads the repo's current memberships across every
+// list, unions in the target list, and writes the whole set back with existing
+// memberships preserved. If the repo is already in the target list, it does not
+// mutate the list.
 func ghAddRepoToList(ctx context.Context, fullname, listRef string) error {
 	return ghSetListMembership(ctx, fullname, listRef, true)
 }
 
 // ghRemoveRepoFromList removes fullname ("owner/repo") from the star list
-// identified by listRef (same id/slug/name matching as ghAddRepoToList),
-// then logs the repo's resulting list membership.
+// identified by listRef (same id/slug/name matching as ghAddRepoToList).
 //
 // It is read-modify-write: it reads the repo's current memberships, drops
-// the target list from that set, and writes the remainder back — every
-// other membership is preserved. If the repo isn't in the target list, it
-// reports that and returns without issuing the mutation. If the target list
-// was the repo's ONLY membership, this sends listIds: [].
+// the target list from that set, and writes the remainder back with every
+// other membership preserved. If the repo isn't in the target list, it
+// reports that and returns without mutating the list.
 func ghRemoveRepoFromList(ctx context.Context, fullname, listRef string) error {
 	return ghSetListMembership(ctx, fullname, listRef, false)
 }
