@@ -60,7 +60,7 @@ func main() {
 			"those results cannot be passed to addStar or removeStar, which only ever act on the " +
 			"authenticated user's own stars. " +
 			"Returns repository identifiers in \"owner/repo\" form along with metadata " +
-			"(description, primary language, star count, topics). " +
+			"(description, primary language, star count). " +
 			"Results are paginated via the page and limit parameters (see their own descriptions). " +
 			"HOW TO CHOOSE limit AND page: omit limit entirely unless the user named a " +
 			"specific number. Omitting it returns the 25 most recently starred repositories " +
@@ -121,6 +121,26 @@ func main() {
 			"removeStarFromList, which only ever act on the authenticated user's own lists. " +
 			"A starred repository may belong to several lists or to none.",
 	}, GetLists)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "getRepositoriesByList",
+		Description: "Return repositories from one of the authenticated user's star lists.\n\n" +
+			"- listName identifies a list by ID, slug, or name. IDs match exactly; slugs and " +
+			"names match case-insensitively. Use getStarListNames without a username to find " +
+			"your lists, and prefer the slug when a name contains emoji.\n" +
+			"- Returns a JSON array with the same repository metadata fields as getStars: " +
+			"ownerName, name, full_name, description, created_at, updated_at, language, fork, " +
+			"forks_count, stargazers_count, licenseName, and htmlUrl. Empty or zero-valued " +
+			"fields may be omitted. List results do not include starred_at.\n" +
+			"- Omit limit for the first 25 repositories. To fetch more, keep the same limit and " +
+			"request page 1, then 2, 3, and so on; stop when a response contains fewer " +
+			"repositories than the limit.\n" +
+			"- Use limit -1 only when the user explicitly asks for all results in one response. " +
+			"It returns the entire list without a size cap and may produce an unmanageably " +
+			"large response.\n" +
+			"- Use getStars for the user's complete set of starred repositories, rather than " +
+			"the contents of one list.",
+	}, GetRepositoriesByList)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "addStarToList",

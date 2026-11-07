@@ -19,9 +19,9 @@ rearrange starred repositories in your lists.
 - `addStar`: Star one or more repositories.
 - `removeStar`: Unstar one or more repositories.
 - `getStarListNames`: Get all starred repository lists by you or somebody else.
+- `getRepositoriesByList`: Get the starred repositories in a particular list.
 - `addStarToList`: Add starred repositories to a list.
 - `removeStarFromList`: Remove starred repositories from a list.
-- (TODO) `getRepositoriesByList`: Get all starred repositories in a particular list.
 
 # Setup
 
@@ -72,6 +72,10 @@ Sample prompts tested with `gpt-oss-20b`:
 `remove the star from petarov/starghlist`
 
 `give me a list of all my starred repository lists`
+
+`give me the first 10 projects in my ai-dev list`
+
+`what's in the list ai-dev`
 
 `add the repo petarov/starghlist to the list ai-dev`
 

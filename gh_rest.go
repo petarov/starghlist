@@ -58,7 +58,7 @@ func newMetaRepo(repo *github.StarredRepository) MetaRepo {
 		StarredAt: repo.GetStarredAt(),
 		// ID:        repo.Repository.GetID(),
 		// NodeID:          repo.Repository.GetNodeID(),
-		OwnerName:   repo.Repository.GetOwner().GetName(),
+		OwnerName:   repo.Repository.GetOwner().GetLogin(),
 		Name:        repo.Repository.GetName(),
 		FullName:    repo.Repository.GetFullName(),
 		Description: repo.Repository.GetDescription(),
@@ -75,6 +75,23 @@ func newMetaRepo(repo *github.StarredRepository) MetaRepo {
 		// WatchersCount:   repo.Repository.GetWatchersCount(),
 		LicenseName: repo.Repository.GetLicense().GetName(),
 		HTMLURL:     repo.Repository.GetHTMLURL(),
+	}
+}
+
+func newMetaRepoFromGQL(repo ghGQLRepoNode) MetaRepo {
+	return MetaRepo{
+		OwnerName:       repo.Owner.Login,
+		Name:            repo.Name,
+		FullName:        repo.NameWithOwner,
+		Description:     repo.Description,
+		CreatedAt:       repo.CreatedAt,
+		UpdatedAt:       repo.UpdatedAt,
+		Language:        repo.PrimaryLanguage.Name,
+		Fork:            repo.IsFork,
+		ForksCount:      repo.ForkCount,
+		StargazersCount: repo.StargazerCount,
+		LicenseName:     repo.LicenseInfo.Name,
+		HTMLURL:         repo.URL,
 	}
 }
 
@@ -97,7 +114,7 @@ func ghFetchStarred(ctx context.Context, username string, page int, limit int) (
 		ListOptions: github.ListOptions{PerPage: perPage, Page: page},
 	}
 
-	var results []MetaRepo
+	results := []MetaRepo{}
 
 	for {
 		starred, resp, err := ghClient.Activity.ListStarred(ctx, username, opts)

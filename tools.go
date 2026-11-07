@@ -30,6 +30,12 @@ type GetListsParams struct {
 	Username string `json:"username,omitempty" jsonschema:"Optional username to get another user's public star lists (name and slug only, no id, visibility, or item count). Omit to get the authenticated user's own lists (richer output - name, slug, id, visibility, item count). Lists returned for another user are NOT usable as the listName argument to addStarToList/removeStarFromList, which only operate on the authenticated user's own lists"`
 }
 
+type GetRepositoriesByListParams struct {
+	ListName string `json:"listName" jsonschema:"Required identifier of the star list to get the repositories of - a list's slug, name, or ID as returned by getStarListNames"`
+	Page     int    `json:"page,omitempty" jsonschema:"Optional 1-based page number; page size equals limit (25 by default). Increment page (2, 3, ...) to fetch further batches of the list; a batch smaller than the page size means there are no more results - this is the preferred way to retrieve a list's entire contents without using limit -1. Do not combine page with limit -1"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"Optional. Omit unless the user named a specific number. Omitted returns the 25 first repositories in the list (page 1) - correct for open-ended requests like 'what is in my ai-dev list'. Set a positive number when the user names a count. IMPORTANT: 'all of them' / 'fetch all' / 'everything' by THEMSELVES do NOT mean set this to -1 - they mean iterate with page: 1, 2, 3, ... at the default page size, stopping once a batch comes back smaller than that size. Set limit: -1 ONLY if the user explicitly rules out multiple calls in their own words (e.g. 'in a single response, don't paginate') - this returns the whole list unbounded in one call and may be too large to process or fail outright"`
+}
+
 type AddStarToListParams struct {
 	Fullnames []string `json:"fullnames,omitempty" jsonschema:"Required list of repository full names to add to the list. A repository fullname is in the form of 'owner/name'"`
 	ListName  string   `json:"listName,omitempty" jsonschema:"Required identifier of the star list to add the repositories to - a list's slug, name, or ID as returned by getStarListNames"`
@@ -136,6 +142,43 @@ func GetLists(ctx context.Context, req *mcp.CallToolRequest, params *GetListsPar
 		if err != nil {
 			return newToolError("json marshal lists"), nil, nil
 		}
+	}
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: string(data)},
+		},
+	}, nil, nil
+}
+
+func GetRepositoriesByList(ctx context.Context, req *mcp.CallToolRequest,
+	params *GetRepositoriesByListParams) (*mcp.CallToolResult, any, error) {
+	lists, err := gqlAllLists(ctx)
+	if err != nil {
+		return newToolError(fmt.Sprintf("fetching star lists: %v", err)), nil, nil
+	}
+
+	target := findList(lists, params.ListName)
+	if target == nil {
+		return newToolError(listNotFoundError(lists, params.ListName).Error()), nil, nil
+	}
+
+	limit := params.Limit
+	switch {
+	case limit == 0:
+		limit = defaultStarsLimit
+	case limit < 0:
+		limit = 0 // no limit
+	}
+
+	repos, err := ghFetchListRepos(ctx, target.ID, params.Page, limit)
+	if err != nil {
+		return newToolError(fmt.Sprintf("fetching repositories in list %q: %v", target.Slug, err)), nil, nil
+	}
+
+	data, err := json.Marshal(repos)
+	if err != nil {
+		return newToolError("json marshal repositories"), nil, nil
 	}
 
 	return &mcp.CallToolResult{

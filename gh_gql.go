@@ -12,11 +12,16 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/google/go-github/v74/github"
 )
 
 const (
 	ghGraphQLURL                   = "https://api.github.com/graphql"
 	ghGraphQLMembershipConcurrency = 5
+	// ghGraphQLMaxPageSize is the largest page size the GitHub GraphQL API
+	// allows for a connection's `first` argument
+	ghGraphQLMaxPageSize = 100
 )
 
 var (
@@ -170,6 +175,262 @@ func gqlAllLists(ctx context.Context) ([]ghListSummary, error) {
 	return resp.Viewer.Lists.Nodes, nil
 }
 
+// ghGQLRepoNode is the subset of Repository fields returned for a star list's
+// items
+//
+// Nullable GraphQL fields (description, primaryLanguage, licenseInfo) decode
+// into their zero value, which is what MetaRepo expects for a missing one.
+type ghGQLRepoNode struct {
+	NameWithOwner  string           `json:"nameWithOwner"`
+	Name           string           `json:"name"`
+	Description    string           `json:"description"`
+	URL            string           `json:"url"`
+	StargazerCount int              `json:"stargazerCount"`
+	ForkCount      int              `json:"forkCount"`
+	IsFork         bool             `json:"isFork"`
+	CreatedAt      github.Timestamp `json:"createdAt"`
+	UpdatedAt      github.Timestamp `json:"updatedAt"`
+	Owner          struct {
+		Login string `json:"login"`
+	} `json:"owner"`
+	PrimaryLanguage struct {
+		Name string `json:"name"`
+	} `json:"primaryLanguage"`
+	LicenseInfo struct {
+		Name string `json:"name"`
+	} `json:"licenseInfo"`
+}
+
+// gqlListItemsQuery is a single page of a list's items. Lists have no
+// User.list(slug:) field, so node(id:) is the only way in — same as
+// gqlListContainsRepo, which asks for far fewer fields because it only needs
+// repository IDs.
+const gqlListItemsQuery = `
+	query($id: ID!, $first: Int!, $after: String) {
+	  node(id: $id) {
+	    ... on UserList {
+	      items(first: $first, after: $after) {
+	        pageInfo { hasNextPage endCursor }
+	        nodes {
+	          __typename
+	          ... on Repository {
+	            nameWithOwner
+	            name
+	            description
+	            url
+	            stargazerCount
+	            forkCount
+	            isFork
+	            owner { login }
+	            primaryLanguage { name }
+	            licenseInfo { name }
+	            createdAt
+	            updatedAt
+	          }
+	        }
+	      }
+	    }
+	  }
+	}`
+
+// gqlListCountQuery counts the repositories in one page of a list's items
+// without paying for the item payload. Node types are needed because the
+// connection can hold null slots and non-repository items, which must not be
+// counted as repositories.
+const gqlListCountQuery = `
+	query($id: ID!, $first: Int!, $after: String) {
+	  node(id: $id) {
+	    ... on UserList {
+	      items(first: $first, after: $after) {
+	        pageInfo { hasNextPage endCursor }
+	        nodes { __typename }
+	      }
+	    }
+	  }
+	}`
+
+type gqlListItemsResp struct {
+	Node *struct {
+		Items struct {
+			PageInfo ghPageInfo `json:"pageInfo"`
+			// nodes is [UserListItems] with nullable elements per the schema
+			Nodes []struct {
+				Typename string `json:"__typename"`
+				ghGQLRepoNode
+			} `json:"nodes"`
+		} `json:"items"`
+	} `json:"node"`
+}
+
+// gqlListItemsPage fetches one page (at most ghGraphQLMaxPageSize items) of the
+// star list identified by listID, starting after the given cursor. An empty
+// cursor starts at the beginning; the returned page info carries the next one.
+func gqlListItemsPage(ctx context.Context, listID string, first int, after string) ([]MetaRepo, ghPageInfo, error) {
+	vars := map[string]any{"id": listID, "first": first}
+	if len(after) > 0 {
+		vars["after"] = after
+	}
+
+	var resp gqlListItemsResp
+	if err := gqlQuery(ctx, gqlListItemsQuery, vars, &resp); err != nil {
+		return nil, ghPageInfo{}, fmt.Errorf("page items of list %s: %w", listID, err)
+	}
+	if resp.Node == nil {
+		return nil, ghPageInfo{}, fmt.Errorf("list %s not found (deleted?) or not a star list", listID)
+	}
+
+	repos := make([]MetaRepo, 0, len(resp.Node.Items.Nodes))
+	for _, n := range resp.Node.Items.Nodes {
+		// only repositories count; null slots and other item types do not
+		if n.Typename != "Repository" || len(n.NameWithOwner) == 0 {
+			continue
+		}
+		repos = append(repos, newMetaRepoFromGQL(n.ghGQLRepoNode))
+	}
+
+	return repos, resp.Node.Items.PageInfo, nil
+}
+
+// gqlListCountPage is gqlListItemsPage without the item fields, used when paging
+// past items that are not part of the requested result. It returns the number
+// of repositories in the page, not the number of item slots, so that page
+// boundaries are counted in repositories.
+func gqlListCountPage(ctx context.Context, listID string, first int, after string) (int, ghPageInfo, error) {
+	vars := map[string]any{"id": listID, "first": first}
+	if len(after) > 0 {
+		vars["after"] = after
+	}
+
+	var resp struct {
+		Node *struct {
+			Items struct {
+				PageInfo ghPageInfo `json:"pageInfo"`
+				Nodes    []struct {
+					Typename string `json:"__typename"`
+				} `json:"nodes"`
+			} `json:"items"`
+		} `json:"node"`
+	}
+
+	if err := gqlQuery(ctx, gqlListCountQuery, vars, &resp); err != nil {
+		return 0, ghPageInfo{}, fmt.Errorf("count items of list %s: %w", listID, err)
+	}
+	if resp.Node == nil {
+		return 0, ghPageInfo{}, fmt.Errorf("list %s not found (deleted?) or not a star list", listID)
+	}
+
+	repos := 0
+	for _, n := range resp.Node.Items.Nodes {
+		if n.Typename == "Repository" {
+			repos++
+		}
+	}
+
+	return repos, resp.Node.Items.PageInfo, nil
+}
+
+// ghFetchListRepos returns the repositories inside a star list.
+//
+// limit > 0 returns a single batch of at most limit repositories taken from the
+// 1-based page (page size = limit), mirroring ghFetchStarred. limit <= 0 returns
+// the whole list and ignores page, walking every cursor.
+//
+// The API paginates a list by cursor, so a page number is served by advancing
+// (page-1)*limit repositories with count-only requests and fetching item fields
+// only for the page that is actually returned. Page boundaries and batch sizes
+// are counted in repositories, so a batch shorter than limit always means the
+// list ended, never that a page happened to hold non-repository items.
+func ghFetchListRepos(ctx context.Context, listID string, page, limit int) ([]MetaRepo, error) {
+	if limit <= 0 {
+		return gqlListAllRepos(ctx, listID)
+	}
+	if page < 1 {
+		page = 1
+	}
+
+	after, ok, err := gqlListSkip(ctx, listID, (page-1)*limit)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		// page is past the end of the list
+		return []MetaRepo{}, nil
+	}
+
+	// fetch the page itself, in chunks of at most ghGraphQLMaxPageSize items;
+	// a chunk holding null slots or non-repository items yields fewer than
+	// chunk repositories, so keep going until limit is reached or the list ends
+	repos := make([]MetaRepo, 0, limit)
+	remaining := limit
+	for remaining > 0 {
+		chunk := min(remaining, ghGraphQLMaxPageSize)
+		items, info, err := gqlListItemsPage(ctx, listID, chunk, after)
+		if err != nil {
+			return nil, err
+		}
+		repos = append(repos, items...)
+		remaining -= len(items)
+
+		next := info.EndCursor
+		if remaining <= 0 || !info.HasNextPage || len(next) == 0 || next == after {
+			break
+		}
+		after = next
+	}
+
+	return repos, nil
+}
+
+// gqlListSkip advances past the first count repositories of a list, without
+// fetching their fields. It reports false when the list has fewer than count
+// repositories.
+func gqlListSkip(ctx context.Context, listID string, count int) (string, bool, error) {
+	var after string
+
+	for count > 0 {
+		chunk := min(count, ghGraphQLMaxPageSize)
+		repos, info, err := gqlListCountPage(ctx, listID, chunk, after)
+		if err != nil {
+			return "", false, err
+		}
+		if !info.HasNextPage {
+			return "", false, nil
+		}
+
+		// a page may hold fewer repositories than slots; keep advancing
+		// anyway, since the cursor still moves past all of the page's items
+		next := info.EndCursor
+		if len(next) == 0 || next == after {
+			return "", false, nil
+		}
+		after = next
+		count -= repos
+	}
+
+	return after, true, nil
+}
+
+// gqlListAllRepos walks a list's entire set of items
+func gqlListAllRepos(ctx context.Context, listID string) ([]MetaRepo, error) {
+	repos := []MetaRepo{}
+	var after string
+
+	for {
+		items, info, err := gqlListItemsPage(ctx, listID, ghGraphQLMaxPageSize, after)
+		if err != nil {
+			return nil, err
+		}
+		repos = append(repos, items...)
+
+		if !info.HasNextPage || len(info.EndCursor) == 0 || info.EndCursor == after {
+			break
+		}
+		after = info.EndCursor
+	}
+
+	return repos, nil
+}
+
 // gqlListContainsRepo pages through a single list's items via node(id:) —
 // there is no User.list(slug:) field, so this is the only way to look up one
 // list's contents by ID.
@@ -306,6 +567,23 @@ func gqlUpdateListsForItem(ctx context.Context, repoID string, listIDs []string)
 	return resp.UpdateUserListsForItem.Lists, nil
 }
 
+// listNotFoundError reports an unresolvable list reference and names the lists
+// that were actually available, since the reference is usually a typo or a
+// list name the agent invented
+func listNotFoundError(lists []ghListSummary, ref string) error {
+	if len(lists) == 0 {
+		return fmt.Errorf("no list matching %q by id/slug/name; the account has no star lists", ref)
+	}
+
+	refs := make([]string, len(lists))
+	for i, l := range lists {
+		refs[i] = fmt.Sprintf("%s (slug=%s)", l.Name, l.Slug)
+	}
+	sort.Strings(refs)
+
+	return fmt.Errorf("no list matching %q by id/slug/name; available lists: %s", ref, strings.Join(refs, ", "))
+}
+
 // findList matches ref against a list's ID, then slug, then name, in that order.
 func findList(lists []ghListSummary, ref string) *ghListSummary {
 	for i := range lists {
@@ -357,12 +635,7 @@ func ghSetListMembership(ctx context.Context, fullname, listRef string, add bool
 
 	target := findList(lists, listRef)
 	if target == nil {
-		refs := make([]string, len(lists))
-		for i, l := range lists {
-			refs[i] = fmt.Sprintf("%s (slug=%s)", l.Name, l.Slug)
-		}
-		sort.Strings(refs)
-		return fmt.Errorf("no list matching %q by id/slug/name; available lists: %s", listRef, strings.Join(refs, ", "))
+		return listNotFoundError(lists, listRef)
 	}
 
 	repoID, err := gqlRepoID(ctx, owner, name)
